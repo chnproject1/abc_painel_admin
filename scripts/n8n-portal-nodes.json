@@ -1,0 +1,174 @@
+{
+  "name": "Portal abcMusic - Nodes HTTP",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://COLOCAR-URL-VPS/api/checkout?id={{ $('Webhook - Entrada').item.json.payment_id }}",
+        "options": {}
+      },
+      "id": "portal-buscar-cliente",
+      "name": "Portal - Buscar Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"music_ready\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\",\n  \"link_pagina\": \"{{ $json.link_pagina }}\",\n  \"link_audio\": \"{{ $json.link_audio }}\",\n  \"link_basica\": \"{{ $json.link_basica }}\",\n  \"song_id\": \"{{ $json.song_id }}\",\n  \"data_entrega\": \"{{ $now }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-music-ready",
+      "name": "Portal - Marcar Gerou Música",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"whats_entregue\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-whats-entregue",
+      "name": "Portal - Whats Entregue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"whats_erro\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-whats-erro",
+      "name": "Portal - Whats Erro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"email_entregue\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-email-entregue",
+      "name": "Portal - Email Entregue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"email_erro\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-email-erro",
+      "name": "Portal - Email Erro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 800]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"erro_geracao\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-update-status",
+      "name": "Portal - Update Status (Erro Geração)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 1000]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://COLOCAR-URL-VPS/api/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-callback-secret", "value": "lBsh1orpba6UQ4zxtLAG3RTvMydJWFS2" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"action\": \"erro_geracao\",\n  \"id\": \"{{ $('Webhook - Entrada').item.json.payment_id }}\"\n}",
+        "options": {}
+      },
+      "id": "portal-update-plan",
+      "name": "Portal - Update Plan (Erro Suno)",
+
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 1200]
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1" }
+}

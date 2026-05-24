@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Pedido {
+  id               String    @id
+  nome             String
+  telefone         String
+  email            String
+  plano            String    @default("")
+  status           String    @default("pendente")
+  estilo           String?
+  letra            String?   @db.Text
+  gerou_musica     Boolean   @default(false)
+  link_pagina      String?
+  link_basica      String?
+  link_audio       String?
+  song_id          String?
+  data_entrega     DateTime?
+  entrega_whatsapp Boolean   @default(false)
+  entrega_email    Boolean   @default(false)
+  link_mp4         String?
+
+  // Visível apenas para admin
+  data_pedido      DateTime?
+  valor            Decimal?  @db.Decimal(10, 2)
+  utm_source       String?
+  utm_campaign     String?
+  utm_medium       String?
+  utm_content      String?
+  utm_term         String?
+  utm_id           String?
+  fbclid           String?
+  ip               String?
+
+  criado_em        DateTime  @default(now())
+  atualizado_em    DateTime  @updatedAt
+
+  @@index([telefone])
+  @@index([email])
+  @@index([status])
+}
+
+model Usuario {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  senha    String
+  nome     String
+  role     Role    @default(OPERADOR)
+  ativo    Boolean @default(true)
+}
+
+enum Role {
+  ADMIN
+  OPERADOR
+  PRODUTOR
+}
