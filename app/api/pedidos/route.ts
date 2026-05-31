@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 
 const LIMIT = 50;
 
+// Registros anteriores a esta data ficam no banco mas não aparecem nos filtros operacionais
+const INICIO_AUTOMACAO = new Date("2026-05-16T03:00:00.000Z"); // 16/05/2026 00:00:00 BRT
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -20,15 +23,18 @@ export async function GET(req: NextRequest) {
   switch (filtro) {
     case "pagos":
       where.status = "pago";
+      where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
     case "pendentes":
       where.status = "pago";
       where.entrega_whatsapp = false;
       where.entrega_email = false;
+      where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
     case "erro":
       where.status = "pago";
       where.gerou_musica = false;
+      where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
   }
 

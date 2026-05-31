@@ -91,7 +91,7 @@ function PedidoCard({ p }: { p: Pedido }) {
             {p.plano && <span className="capitalize">{p.plano}</span>}
             {p.estilo && <span> · {p.estilo}</span>}
             {p.data_pedido && (
-              <span> · {new Date(p.data_pedido).toLocaleDateString("pt-BR")}</span>
+              <span> · {new Date(p.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
             )}
           </p>
           {alertaPago  && <p className="text-xs text-red-500 font-medium mt-1">Pago — música não gerada</p>}

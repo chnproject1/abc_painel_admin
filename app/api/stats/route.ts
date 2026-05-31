@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 // Somente pedidos a partir do início da automação são contabilizados nos stats
 // Registros anteriores ficam no banco mas não afetam os indicadores
-const INICIO_AUTOMACAO = new Date("2026-05-07T21:40:21.000Z"); // 07/05/2026 18:40:21 BRT
+const INICIO_AUTOMACAO = new Date("2026-05-16T03:00:00.000Z"); // 16/05/2026 00:00:00 BRT
 
 export async function GET() {
   const session = await getServerSession(authOptions);

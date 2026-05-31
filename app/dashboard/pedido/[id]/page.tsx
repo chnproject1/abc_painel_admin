@@ -59,6 +59,7 @@ export default function PedidoPage() {
 
   const [acionando, setAcionando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const role = (session?.user as any)?.role ?? "OPERADOR";
@@ -113,6 +114,25 @@ export default function PedidoPage() {
       mostrarToast("erro", e.message || "Erro ao normalizar.");
     } finally {
       setNormalizando(false);
+    }
+  }
+
+  async function cancelarPedido() {
+    if (!confirm("Marcar como contato inválido? O pedido sairá das listas de pendentes e erros.")) return;
+    setCancelando(true);
+    try {
+      const res = await fetch(`/api/pedido/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelado" }),
+      });
+      if (!res.ok) throw new Error("Erro ao cancelar");
+      setPedido(prev => prev ? { ...prev, status: "cancelado" } : prev);
+      mostrarToast("ok", "Pedido marcado como contato inválido.");
+    } catch {
+      mostrarToast("erro", "Erro ao atualizar o pedido.");
+    } finally {
+      setCancelando(false);
     }
   }
 
@@ -225,6 +245,17 @@ export default function PedidoPage() {
               <span className="text-sm font-medium text-gray-700">
                 {new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
               </span>
+            </div>
+          )}
+          {isAdmin && pedido.status !== "cancelado" && (
+            <div className="ml-auto flex items-center">
+              <button
+                onClick={cancelarPedido}
+                disabled={cancelando}
+                className="text-xs border border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 hover:text-red-600 disabled:opacity-50 font-medium rounded-lg px-3 py-1.5 transition-colors"
+              >
+                {cancelando ? "..." : "Contato inválido"}
+              </button>
             </div>
           )}
         </div>
