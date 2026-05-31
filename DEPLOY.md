@@ -38,10 +38,23 @@ nano .env
 #   DATABASE_URL=postgresql://abc_user:senha-segura-aqui@localhost:5432/abc_music
 #   NEXTAUTH_SECRET=<resultado de: openssl rand -base64 32>
 #   NEXTAUTH_URL=http://IP-DA-VPS:3000
-#   N8N_WEBHOOK_URL=<url do webhook n8n>
+#   TZ=America/Sao_Paulo                     ← obrigatório para datas corretas
+#   N8N_WEBHOOK_URL=<webhook de geração>      ← reprocessa e gera a música
+#   N8N_WEBHOOK_ENVIO_URL=<webhook de envio>  ← só envia ao cliente (sem regerar)
 ```
 
-## 4. Criar tabelas e importar dados
+## 4. Timezone do banco de dados (obrigatório — fazer uma vez)
+
+Conecte ao banco e execute:
+```sql
+ALTER DATABASE abc_music SET timezone TO 'America/Sao_Paulo';
+```
+
+> O n8n envia datas sem offset de fuso. Sem isso, os horários ficam 3h adiantados no banco.
+> O `TZ=America/Sao_Paulo` no Node.js cuida do parsing no servidor; o `ALTER DATABASE` cuida das queries no Postgres.
+> **Não rodar script de correção em banco novo** — o problema só existe em dados migrados de antes dessa configuração.
+
+## 5. Criar tabelas e importar dados
 ```bash
 # Criar tabelas no banco
 npm run db:push
@@ -56,7 +69,7 @@ node scripts/criar-usuario.js operador@email.com senha123 "Nome do Operador" OPE
 node scripts/import-xlsx.js /caminho/para/CORRECAO.xlsx
 ```
 
-## 5. Build e iniciar com PM2
+## 6. Build e iniciar com PM2
 ```bash
 npm run build
 
@@ -65,7 +78,7 @@ pm2 save
 pm2 startup  # para iniciar automaticamente no boot
 ```
 
-## 6. (Opcional) Nginx como proxy reverso
+## 7. (Opcional) Nginx como proxy reverso
 ```nginx
 server {
     listen 80;
@@ -94,6 +107,29 @@ A forma mais simples é usar o n8n que você já tem:
 3. Use o node **HTTP Request** para fazer POST em `/api/pedido/{id}` com os campos atualizados
 
 Ou simplesmente exporte o Sheets como XLSX e rode o script de import novamente — ele faz `upsert` (atualiza se já existe, cria se não existe).
+
+## Deploy via EasyPanel (produção atual)
+
+### Variáveis de ambiente (serviço Next.js → Environment)
+| Variável | Descrição |
+|---|---|
+| `DATABASE_URL` | URL do Postgres do EasyPanel |
+| `NEXTAUTH_SECRET` | String aleatória segura |
+| `NEXTAUTH_URL` | URL pública do serviço |
+| `TZ` | `America/Sao_Paulo` |
+| `N8N_WEBHOOK_URL` | Webhook de geração de música |
+| `N8N_WEBHOOK_ENVIO_URL` | Webhook de envio ao cliente (sem regerar) |
+
+### Timezone do banco (serviço Postgres → Terminal, uma vez)
+```sql
+psql -U postgres abc_music
+ALTER DATABASE abc_music SET timezone TO 'America/Sao_Paulo';
+```
+
+### Fluxos n8n
+- **`N8N_WEBHOOK_URL`** — reprocessa o pedido e gera/atualiza a música  
+- **`N8N_WEBHOOK_ENVIO_URL`** — apenas envia a música já gerada ao cliente (WhatsApp + e-mail)  
+- Ambos recebem `{ "payment_id": "<id do pedido>" }` via POST
 
 ## Comandos úteis
 ```bash

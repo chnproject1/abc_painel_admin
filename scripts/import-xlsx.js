@@ -14,7 +14,8 @@ const prisma = new PrismaClient();
 
 function excelDateToJS(serial) {
   if (!serial || typeof serial !== "number") return null;
-  const date = new Date((serial - 25569) * 86400 * 1000);
+  // Excel serial → UTC + 3h (Excel armazena como BRT, banco espera UTC)
+  const date = new Date((serial - 25569) * 86400 * 1000 + 3 * 60 * 60 * 1000);
   return isNaN(date.getTime()) ? null : date;
 }
 
