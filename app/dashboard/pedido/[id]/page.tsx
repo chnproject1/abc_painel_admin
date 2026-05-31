@@ -324,7 +324,12 @@ export default function PedidoPage() {
                 <LinkBtn href={pedido.link_basica} label="🔗 Página Básica" />
               )}
               {pedido.link_audio && (
-                <LinkBtn href={pedido.link_audio} label="🎵 Áudio" download />
+                <a
+                  href={`/api/download?url=${encodeURIComponent(pedido.link_audio)}&filename=${encodeURIComponent(`${pedido.nome || "audio"}.mp3`)}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium"
+                >
+                  🎵 Áudio
+                </a>
               )}
               {pedido.link_mp4 && (
                 <LinkBtn href={pedido.link_mp4} label="🎬 MP4" />
