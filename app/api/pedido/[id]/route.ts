@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const role = (session.user as any).role ?? "OPERADOR";
   const camposPermitidos =
     role === "ADMIN"
-      ? ["letra", "status", "estilo", "gerou_musica", "link_pagina", "link_basica", "link_audio", "song_id", "data_entrega", "entrega_whatsapp", "entrega_email", "link_mp4"]
+      ? ["letra", "status", "estilo", "gerou_musica", "link_pagina", "link_basica", "link_audio", "song_id", "data_entrega", "entrega_whatsapp", "entrega_email", "link_mp4", "nome", "telefone", "email"]
       : ["letra", "estilo"]; // OPERADOR e PRODUTOR
 
   const update: any = {};

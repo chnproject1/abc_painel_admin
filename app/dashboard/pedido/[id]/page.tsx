@@ -30,21 +30,39 @@ interface Toast {
   texto: string;
 }
 
+const STATUS_COR: Record<string, string> = {
+  pendente:    "bg-gray-100 text-gray-600",
+  pago:        "bg-green-100 text-green-700",
+  concluido:   "bg-green-100 text-green-700",
+  cancelado:   "bg-red-100 text-red-700",
+  processando: "bg-blue-100 text-blue-700",
+};
+
 export default function PedidoPage() {
   const { id } = useParams();
   const { data: session } = useSession();
   const router = useRouter();
 
   const [pedido, setPedido] = useState<Pedido | null>(null);
-  const [letra, setLetra] = useState("");
-  const [estilo, setEstilo] = useState("");
+
+  // Letra / estilo
+  const [letra, setLetra]         = useState("");
+  const [estilo, setEstilo]       = useState("");
+  const [letraSalva, setLetraSalva]   = useState("");
+  const [estiloSalvo, setEstiloSalvo] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const temAlteracao = letra !== letraSalva || estilo !== estiloSalvo;
+
+  // Normalização
+  const [normalizando, setNormalizando] = useState(false);
+  const [resultadoNorm, setResultadoNorm] = useState<{ emails: number; telefones: number; nomes: number } | null>(null);
+
   const [acionando, setAcionando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const role = (session?.user as any)?.role ?? "OPERADOR";
   const isAdmin = role === "ADMIN";
-  const isProdutor = role === "PRODUTOR";
 
   function mostrarToast(tipo: "ok" | "erro", texto: string) {
     setToast({ tipo, texto });
@@ -58,6 +76,8 @@ export default function PedidoPage() {
         setPedido(data);
         setLetra(data.letra ?? "");
         setEstilo(data.estilo ?? "");
+        setLetraSalva(data.letra ?? "");
+        setEstiloSalvo(data.estilo ?? "");
       });
   }, [id]);
 
@@ -70,7 +90,9 @@ export default function PedidoPage() {
         body: JSON.stringify({ letra, estilo }),
       });
       if (!res.ok) throw new Error("Erro ao salvar");
-      mostrarToast("ok", "Letra salva com sucesso!");
+      setLetraSalva(letra);
+      setEstiloSalvo(estilo);
+      mostrarToast("ok", "Alterações salvas!");
     } catch {
       mostrarToast("erro", "Erro ao salvar a letra.");
     } finally {
@@ -78,9 +100,50 @@ export default function PedidoPage() {
     }
   }
 
+  async function normalizarDados() {
+    setNormalizando(true);
+    setResultadoNorm(null);
+    try {
+      const res  = await fetch("/api/admin/normalizar", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResultadoNorm(data.atualizados);
+      mostrarToast("ok", "Dados normalizados com sucesso!");
+    } catch (e: any) {
+      mostrarToast("erro", e.message || "Erro ao normalizar.");
+    } finally {
+      setNormalizando(false);
+    }
+  }
+
+  async function acionarEnvio() {
+    setEnviando(true);
+    try {
+      const res = await fetch(`/api/trigger-envio/${id}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao acionar envio");
+      mostrarToast("ok", "Música enviada ao cliente!");
+    } catch (e: any) {
+      mostrarToast("erro", e.message || "Erro ao enviar música.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function acionarN8n() {
     setAcionando(true);
     try {
+      // Salva alterações pendentes antes de enviar
+      if (temAlteracao) {
+        const resSalvar = await fetch(`/api/pedido/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ letra, estilo }),
+        });
+        if (!resSalvar.ok) throw new Error("Erro ao salvar alterações antes de enviar");
+        setLetraSalva(letra);
+        setEstiloSalvo(estilo);
+      }
       const res = await fetch(`/api/trigger/${id}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao acionar");
@@ -100,66 +163,148 @@ export default function PedidoPage() {
     );
   }
 
+  const musicaGerada = pedido.gerou_musica || !!pedido.link_audio || !!pedido.link_pagina;
+  const entregue = pedido.entrega_whatsapp || pedido.entrega_email;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Toast flutuante */}
+      {/* Toast */}
       {toast && (
-        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${
-          toast.tipo === "ok"
-            ? "bg-avocado-600 text-white"
-            : "bg-red-600 text-white"
+        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg text-sm font-medium ${
+          toast.tipo === "ok" ? "bg-avocado-600 text-white" : "bg-red-600 text-white"
         }`}>
           {toast.tipo === "ok" ? "✓" : "✕"} {toast.texto}
         </div>
       )}
 
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-avocado-600 hover:text-avocado-800 text-sm font-medium">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-gray-500 hover:text-gray-800 font-medium shrink-0"
+        >
           ← Voltar
         </button>
-        <h1 className="text-base font-bold text-gray-900 truncate">{pedido.nome}</h1>
+        <div className="flex-1 min-w-0 flex items-center gap-3">
+          <h1 className="text-base font-bold text-gray-900 truncate">{pedido.nome}</h1>
+          <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COR[pedido.status] ?? "bg-gray-100 text-gray-600"}`}>
+            {pedido.status}
+          </span>
+        </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
 
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Informações</h2>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <InfoItem label="Nome" value={pedido.nome} />
-            <InfoItem label="Telefone" value={pedido.telefone} />
-            <InfoItem label="Email" value={pedido.email} />
-            <InfoItem label="Plano" value={pedido.plano} />
-            <InfoItem label="Status" value={pedido.status} />
-            <InfoItem label="Song ID" value={pedido.song_id} />
-            <InfoItem label="Gerou música" value={(pedido.gerou_musica || !!pedido.link_audio || !!pedido.link_pagina) ? "Sim" : "Não"} />
-            <InfoItem label="Entrega WhatsApp" value={pedido.entrega_whatsapp ? "Sim" : "Não"} />
-            <InfoItem label="Entrega Email" value={pedido.entrega_email ? "Sim" : "Não"} />
-            {pedido.data_entrega && (
-              <InfoItem label="Data entrega" value={new Date(pedido.data_entrega).toLocaleDateString("pt-BR")} />
-            )}
-            {isAdmin && pedido.valor && (
-              <InfoItem label="Valor" value={`R$ ${Number(pedido.valor).toFixed(2)}`} />
-            )}
-            {isAdmin && pedido.data_pedido && (
-              <InfoItem label="Data pedido" value={new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
-            )}
-          </dl>
-        </section>
+        {/* Barra de status rápido */}
+        <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 flex flex-wrap gap-4 sm:gap-8">
+          <StatusIndicator
+            label="Música gerada"
+            ativo={musicaGerada}
+            corAtivo="text-green-600"
+            corInativo="text-red-500"
+          />
+          <StatusIndicator
+            label="WhatsApp"
+            ativo={pedido.entrega_whatsapp}
+            corAtivo="text-green-600"
+            corInativo="text-yellow-600"
+            labelAtivo="Entregue"
+            labelInativo="Não entregue"
+          />
+          <StatusIndicator
+            label="E-mail"
+            ativo={pedido.entrega_email}
+            corAtivo="text-green-600"
+            corInativo="text-yellow-600"
+            labelAtivo="Entregue"
+            labelInativo="Não entregue"
+          />
+          {pedido.data_pedido && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs text-gray-400">Data do pedido</span>
+              <span className="text-sm font-medium text-gray-700">
+                {new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+              </span>
+            </div>
+          )}
+        </div>
 
+        {/* Grid: Cliente + Pedido */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          {/* Cliente */}
+          <section className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cliente</h2>
+              {isAdmin && (
+                <button
+                  onClick={normalizarDados}
+                  disabled={normalizando}
+                  className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 rounded-md px-2 py-1 disabled:opacity-40 transition-colors"
+                >
+                  {normalizando ? "..." : "Normalizar"}
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              <Campo label="Nome" valor={pedido.nome} />
+              <Campo label="Telefone" valor={pedido.telefone} />
+              <Campo label="E-mail" valor={pedido.email?.split("?")[0]} />
+            </div>
+            {resultadoNorm && (
+              <p className="text-xs text-green-600 font-medium mt-3">
+                ✓ {resultadoNorm.emails} e-mails · {resultadoNorm.telefones} telefones · {resultadoNorm.nomes} nomes
+              </p>
+            )}
+          </section>
+
+          {/* Pedido */}
+          <section className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Pedido</h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Plano" valor={pedido.plano} capitalize />
+                <Campo label="Estilo" valor={pedido.estilo} />
+              </div>
+              {isAdmin && (
+                <div className="grid grid-cols-2 gap-3">
+                  {pedido.valor && (
+                    <Campo label="Valor" valor={`R$ ${Number(pedido.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                  )}
+                  {pedido.data_entrega && (
+                    <Campo label="Data entrega" valor={new Date(pedido.data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
+                  )}
+                </div>
+              )}
+              <Campo label="Song ID" valor={pedido.song_id} mono />
+            </div>
+          </section>
+        </div>
+
+        {/* Links */}
         {(pedido.link_pagina || pedido.link_basica || pedido.link_audio || pedido.link_mp4) && (
           <section className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Links</h2>
-            <div className="space-y-2 text-sm">
-              {pedido.link_pagina && <LinkItem label="Link Página" href={pedido.link_pagina} />}
-              {pedido.link_basica && <LinkItem label="Link Básico" href={pedido.link_basica} />}
-              {pedido.link_audio && <LinkItem label="Link Áudio" href={pedido.link_audio} />}
-              {pedido.link_mp4 && <LinkItem label="Link MP4" href={pedido.link_mp4} />}
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Links</h2>
+            <div className="flex flex-wrap gap-2">
+              {pedido.link_pagina && (
+                <LinkBtn href={pedido.link_pagina} label="🔗 Página Premium" />
+              )}
+              {pedido.link_basica && (
+                <LinkBtn href={pedido.link_basica} label="🔗 Página Básica" />
+              )}
+              {pedido.link_audio && (
+                <LinkBtn href={pedido.link_audio} label="🎵 Áudio" download />
+              )}
+              {pedido.link_mp4 && (
+                <LinkBtn href={pedido.link_mp4} label="🎬 MP4" />
+              )}
             </div>
           </section>
         )}
 
+        {/* Letra e Estilo */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Letra e Estilo</h2>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Letra e Estilo</h2>
           <div className="mb-3">
             <label className="block text-xs text-gray-400 mb-1">Estilo musical</label>
             <input
@@ -174,51 +319,112 @@ export default function PedidoPage() {
           <textarea
             value={letra}
             onChange={(e) => setLetra(e.target.value)}
-            rows={12}
+            rows={14}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-avocado-500 resize-y"
           />
           <button
             onClick={salvarLetra}
-            disabled={salvando}
-            className="mt-3 bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
+            disabled={salvando || !temAlteracao}
+            className={`mt-3 font-medium rounded-lg px-5 py-2 text-sm transition-all disabled:opacity-40 ${
+              temAlteracao
+                ? "bg-avocado-600 hover:bg-avocado-700 text-white shadow-sm"
+                : "bg-gray-200 text-gray-500 cursor-default"
+            }`}
           >
-            {salvando ? "Salvando..." : "Salvar"}
+            {salvando ? "Salvando..." : temAlteracao ? "Salvar alterações ●" : "Salvar alterações"}
           </button>
         </section>
 
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-xs text-gray-400 mb-3">Reenvia o pedido para produção e atualiza a música do cliente.</p>
-          <button
-            onClick={acionarN8n}
-            disabled={acionando}
-            className="bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
-          >
-            {acionando ? "Enviando..." : "Enviar para produção"}
-          </button>
+        {/* Ações */}
+        <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          {/* Enviar ao cliente */}
+          <div className="p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Enviar ao cliente</p>
+              <p className="text-xs text-gray-400 mt-0.5">Envia a música já gerada por WhatsApp e e-mail.</p>
+            </div>
+            <button
+              onClick={acionarEnvio}
+              disabled={enviando}
+              className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
+            >
+              {enviando ? "Enviando..." : "Enviar"}
+            </button>
+          </div>
+          {/* Gerar música */}
+          <div className="p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Gerar música</p>
+              <p className="text-xs text-gray-400 mt-0.5">Reenvia para produção e atualiza a música do cliente.</p>
+            </div>
+            <button
+              onClick={acionarN8n}
+              disabled={acionando}
+              className="shrink-0 bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
+            >
+              {acionando ? "Gerando..." : "Gerar e enviar"}
+            </button>
+          </div>
         </section>
+
 
       </main>
     </div>
   );
 }
 
-function InfoItem({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
+/* ── Sub-componentes ── */
+
+function StatusIndicator({
+  label, ativo, corAtivo, corInativo,
+  labelAtivo = "Sim", labelInativo = "Não",
+}: {
+  label: string;
+  ativo: boolean;
+  corAtivo: string;
+  corInativo: string;
+  labelAtivo?: string;
+  labelInativo?: string;
+}) {
   return (
-    <div>
-      <dt className="text-gray-400 text-xs">{label}</dt>
-      <dd className="text-gray-900 font-medium mt-0.5 break-words">{value}</dd>
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-gray-400">{label}</span>
+      <span className={`text-sm font-semibold flex items-center gap-1 ${ativo ? corAtivo : corInativo}`}>
+        {ativo ? "✓" : "✕"} {ativo ? labelAtivo : labelInativo}
+      </span>
     </div>
   );
 }
 
-function LinkItem({ label, href }: { label: string; href: string }) {
+function Campo({
+  label, valor, capitalize, mono,
+}: {
+  label: string;
+  valor?: string | null;
+  capitalize?: boolean;
+  mono?: boolean;
+}) {
+  if (!valor) return null;
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-gray-500 w-24 shrink-0">{label}:</span>
-      <a href={href} target="_blank" rel="noreferrer" className="text-avocado-600 hover:underline truncate">
-        {href}
-      </a>
+    <div>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+      <p className={`text-sm font-medium text-gray-800 break-words ${capitalize ? "capitalize" : ""} ${mono ? "font-mono text-xs" : ""}`}>
+        {valor}
+      </p>
     </div>
+  );
+}
+
+function LinkBtn({ href, label, download }: { href: string; label: string; download?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      {...(download ? { download: true } : {})}
+      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium"
+    >
+      {label}
+    </a>
   );
 }

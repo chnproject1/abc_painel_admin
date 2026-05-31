@@ -24,6 +24,7 @@ model Pedido {
   data_entrega     DateTime?
   entrega_whatsapp Boolean   @default(false)
   entrega_email    Boolean   @default(false)
+  erro_geracao     Boolean   @default(false)
   link_mp4         String?
 
   // Visível apenas para admin

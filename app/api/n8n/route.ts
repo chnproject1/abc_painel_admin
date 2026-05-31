@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "erro_geracao") {
-      await prisma.pedido.update({ where: { id }, data: { gerou_musica: false } });
+      await prisma.pedido.update({ where: { id }, data: { gerou_musica: false, erro_geracao: true } });
       return NextResponse.json({ success: true, message: "Erro de geração registrado" });
     }
 
