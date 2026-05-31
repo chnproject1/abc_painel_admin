@@ -39,9 +39,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (dataParam) {
+    // Interpreta o dia selecionado como BRT (meia-noite até 23:59 no fuso de Brasília)
     where.data_pedido = {
-      gte: new Date(`${dataParam}T00:00:00.000Z`),
-      lte: new Date(`${dataParam}T23:59:59.999Z`),
+      gte: new Date(`${dataParam}T00:00:00-03:00`),
+      lte: new Date(`${dataParam}T23:59:59.999-03:00`),
     };
   } else if (desdeParam) {
     // Front envia com offset BRT: "2026-05-07T18:40:00-03:00"
