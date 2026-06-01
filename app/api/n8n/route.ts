@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
         where: { id },
         data: {
           gerou_musica: true,
+          erro_geracao: false,
           link_pagina:  data.link_pagina  || undefined,
           link_basica:  data.link_basica  || undefined,
           link_audio:   data.link_audio   || undefined,

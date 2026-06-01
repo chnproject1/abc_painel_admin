@@ -39,6 +39,8 @@ model Pedido {
   fbclid           String?
   ip               String?
 
+  tentativa        Int       @default(0)
+
   criado_em        DateTime  @default(now())
   atualizado_em    DateTime  @updatedAt
 
