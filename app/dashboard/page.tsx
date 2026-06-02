@@ -129,6 +129,7 @@ function DashboardContent() {
   const [filtroAtivo, setFiltroAtivo]       = useState<string | null>(searchParams.get("view"));
   const [filtroData, setFiltroData]         = useState(searchParams.get("data") ?? "");
   const [filtroDesde, setFiltroDesde]       = useState(searchParams.get("desde") ?? "");
+  const [filtroAte, setFiltroAte]           = useState(searchParams.get("ate") ?? "");
   const [filtroPlano, setFiltroPlano]       = useState(searchParams.get("plano") ?? "");
   const [planos, setPlanos]                 = useState<string[]>([]);
   const [pedidosFiltro, setPedidosFiltro]   = useState<Pedido[]>([]);
@@ -144,9 +145,10 @@ function DashboardContent() {
     const page  = parseInt(searchParams.get("page") ?? "1");
     const data  = searchParams.get("data") ?? "";
     const desde = searchParams.get("desde") ?? "";
+    const ate   = searchParams.get("ate") ?? "";
     const plano = searchParams.get("plano") ?? "";
     if (q)    { setBusca(q); executarBusca(q); }
-    if (view || plano) { carregarFiltro(view ?? "todos", page, data, desde, plano); }
+    if (view || plano) { carregarFiltro(view ?? "todos", page, data, desde, ate, plano); }
   }, []);
 
   // Busca planos apenas quando a sessão carregar e confirmar admin
@@ -178,23 +180,26 @@ function DashboardContent() {
     }
   }
 
-  const carregarFiltro = useCallback(async (filtro: string, pagina = 1, data = "", desde = "", plano = "") => {
+  const carregarFiltro = useCallback(async (filtro: string, pagina = 1, data = "", desde = "", ate = "", plano = "") => {
     setBuscaFeita(false);
     setCarregandoFiltro(true);
     setFiltroAtivo(filtro);
     setPaginaAtual(pagina);
     setFiltroData(data);
     setFiltroDesde(desde);
+    setFiltroAte(ate);
     setFiltroPlano(plano);
     const params = new URLSearchParams({ view: filtro, page: String(pagina) });
     if (data)  params.set("data", data);
     if (desde) params.set("desde", desde);
+    if (ate)   params.set("ate", ate);
     if (plano) params.set("plano", plano);
     router.replace(`/dashboard?${params.toString()}`);
     try {
       const apiParams = new URLSearchParams({ filtro, page: String(pagina) });
       if (data)  apiParams.set("data", data);
       if (desde) apiParams.set("desde", `${desde}:00-03:00`);
+      if (ate)   apiParams.set("ate", `${ate}:00-03:00`);
       if (plano) apiParams.set("plano", plano);
       const res  = await fetch(`/api/pedidos?${apiParams.toString()}`);
       const json = await res.json();
@@ -207,31 +212,39 @@ function DashboardContent() {
   }, []);
 
   function handleCardClick(filtro: string) {
-    if (filtroAtivo === filtro && !filtroData && !filtroDesde && !filtroPlano) {
+    if (filtroAtivo === filtro && !filtroData && !filtroDesde && !filtroAte && !filtroPlano) {
       setFiltroAtivo(null);
       router.replace("/dashboard");
     } else {
-      carregarFiltro(filtro, 1, filtroData, filtroDesde, filtroPlano);
+      carregarFiltro(filtro, 1, filtroData, filtroDesde, filtroAte, filtroPlano);
     }
   }
 
   function handleDataChange(novaData: string) {
     setFiltroData(novaData);
     setFiltroDesde("");
-    carregarFiltro(filtroAtivo ?? "todos", 1, novaData, "", filtroPlano);
+    setFiltroAte("");
+    carregarFiltro(filtroAtivo ?? "todos", 1, novaData, "", "", filtroPlano);
   }
 
   function handleDesdeChange(novoDesde: string) {
     setFiltroDesde(novoDesde);
     setFiltroData("");
-    if (novoDesde) carregarFiltro(filtroAtivo ?? "todos", 1, "", novoDesde, filtroPlano);
+    carregarFiltro(filtroAtivo ?? "todos", 1, "", novoDesde, filtroAte, filtroPlano);
+  }
+
+  function handleAteChange(novoAte: string) {
+    setFiltroAte(novoAte);
+    setFiltroData("");
+    carregarFiltro(filtroAtivo ?? "todos", 1, "", filtroDesde, novoAte, filtroPlano);
   }
 
   function limparFiltroData() {
     setFiltroData("");
     setFiltroDesde("");
+    setFiltroAte("");
     if (filtroAtivo || filtroPlano) {
-      carregarFiltro(filtroAtivo ?? "todos", 1, "", "", filtroPlano);
+      carregarFiltro(filtroAtivo ?? "todos", 1, "", "", "", filtroPlano);
     } else {
       router.replace("/dashboard");
     }
@@ -239,7 +252,7 @@ function DashboardContent() {
 
   function handlePlanoClick(plano: string) {
     const novo = filtroPlano === plano ? "" : plano;
-    carregarFiltro(filtroAtivo ?? "todos", 1, filtroData, filtroDesde, novo);
+    carregarFiltro(filtroAtivo ?? "todos", 1, filtroData, filtroDesde, filtroAte, novo);
   }
 
   async function handleBuscar(e: React.FormEvent) {
@@ -323,7 +336,7 @@ function DashboardContent() {
         {/* Filtro por data */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-6">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Filtrar por data</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs text-gray-400">Dia exato</label>
               <input
@@ -334,7 +347,7 @@ function DashboardContent() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-400">A partir de (data e hora)</label>
+              <label className="text-xs text-gray-400">De</label>
               <input
                 type="datetime-local"
                 value={filtroDesde}
@@ -342,24 +355,33 @@ function DashboardContent() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-avocado-500"
               />
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Até</label>
+              <input
+                type="datetime-local"
+                value={filtroAte}
+                onChange={(e) => handleAteChange(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-avocado-500"
+              />
+            </div>
           </div>
-          {(filtroData || filtroDesde) && (
+          {(filtroData || filtroDesde || filtroAte) && (
             <div className="flex items-center justify-between mt-3">
-              {filtroDesde ? (
-                <p className="text-xs text-gray-500">
-                  Exibindo a partir de{" "}
-                  <span className="font-medium text-gray-700">
-                    {new Date(`${filtroDesde}:00-03:00`).toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" })}
-                  </span>
-                </p>
-              ) : (
-                <p className="text-xs text-gray-500">
-                  Exibindo pedidos de{" "}
-                  <span className="font-medium text-gray-700">
-                    {new Date(`${filtroData}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
-                  </span>
-                </p>
-              )}
+              <p className="text-xs text-gray-500">
+                {filtroData ? (
+                  <>Exibindo pedidos de{" "}
+                    <span className="font-medium text-gray-700">
+                      {new Date(`${filtroData}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {filtroDesde && <>De <span className="font-medium text-gray-700">{new Date(`${filtroDesde}:00-03:00`).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></>}
+                    {filtroDesde && filtroAte && " "}
+                    {filtroAte && <>até <span className="font-medium text-gray-700">{new Date(`${filtroAte}:00-03:00`).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></>}
+                  </>
+                )}
+              </p>
               <button
                 onClick={limparFiltroData}
                 className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 shrink-0 ml-3"
@@ -401,7 +423,7 @@ function DashboardContent() {
         )}
 
         {/* Lista filtrada pelo card */}
-        {(filtroAtivo || filtroData || filtroDesde || filtroPlano) && (
+        {(filtroAtivo || filtroData || filtroDesde || filtroAte || filtroPlano) && (
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -432,6 +454,7 @@ function DashboardContent() {
                   setFiltroAtivo(null);
                   setFiltroData("");
                   setFiltroDesde("");
+                  setFiltroAte("");
                   setFiltroPlano("");
                   router.replace("/dashboard");
                 }}

@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const page       = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1"));
   const dataParam  = req.nextUrl.searchParams.get("data");   // YYYY-MM-DD  (dia exato)
   const desdeParam = req.nextUrl.searchParams.get("desde"); // ISO datetime (a partir de)
+  const ateParam   = req.nextUrl.searchParams.get("ate");   // ISO datetime (até)
   const planoParam = req.nextUrl.searchParams.get("plano"); // nome do plano
 
   const where: Record<string, unknown> = {};
@@ -44,9 +45,11 @@ export async function GET(req: NextRequest) {
       gte: new Date(`${dataParam}T00:00:00-03:00`),
       lte: new Date(`${dataParam}T23:59:59.999-03:00`),
     };
-  } else if (desdeParam) {
-    // Front envia com offset BRT: "2026-05-07T18:40:00-03:00"
-    where.data_pedido = { gte: new Date(desdeParam) };
+  } else if (desdeParam || ateParam) {
+    const range: Record<string, Date> = {};
+    if (desdeParam) range.gte = new Date(desdeParam);
+    if (ateParam)   range.lte = new Date(ateParam);
+    where.data_pedido = range;
   }
 
   if (planoParam) {
