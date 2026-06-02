@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
       estilo:       data.estilo      || null,
       letra:        data.letra       || null,
       ip:           data.ip          || null,
+      cpf:          data.cpf         || "00000000000",
       data_pedido:  new Date(),
     },
     update: {
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
       estilo:       data.estilo      || undefined,
       letra:        data.letra       || undefined,
       ip:           data.ip          || undefined,
+      cpf:          data.cpf         || undefined,
     },
   });
 
