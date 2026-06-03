@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
       letra:        data.letra       || null,
       ip:           data.ip          || null,
       cpf:          data.cpf         || "00000000000",
+      funil:        data.funil       || null,
       data_pedido:  new Date(),
     },
     update: {
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
       letra:        data.letra       || undefined,
       ip:           data.ip          || undefined,
       cpf:          data.cpf         || undefined,
+      funil:        data.funil       || undefined,
     },
   });
 
