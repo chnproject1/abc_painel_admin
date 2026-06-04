@@ -96,14 +96,23 @@ export async function POST(req: NextRequest) {
   if (data.action === "update") {
     if (!data.id) return erro("id obrigatório", 400);
 
-    const pedido = await prisma.pedido.update({
-      where: { id: data.id },
-      data: { status: "pago" },
-      select: { recovery_id: true },
-    });
+    let pedido: { recovery_id: string | null } | null = null;
+    try {
+      pedido = await prisma.pedido.update({
+        where: { id: data.id },
+        data: { status: "pago" },
+        select: { recovery_id: true },
+      });
+    } catch (e: any) {
+      // P2025 = pedido não encontrado (PIX confirmado mas nunca registrado no banco)
+      if (e?.code === "P2025") {
+        return ok({ message: "Pedido não encontrado, ignorado" });
+      }
+      throw e;
+    }
 
     // Se veio de recuperação, marca o original como recuperado
-    if (pedido.recovery_id) {
+    if (pedido?.recovery_id) {
       await prisma.pedido.update({
         where: { id: pedido.recovery_id },
         data: { status: "recuperado" },
