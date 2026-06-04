@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
     case "erro":
       where.status = "pago";
       where.gerou_musica = false;
+      where.entrega_whatsapp = false;
+      where.entrega_email = false;
       where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
   }

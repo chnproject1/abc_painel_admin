@@ -28,7 +28,9 @@ model Pedido {
   link_mp4         String?
 
   cpf              String    @default("00000000000")
+  nomefiscal       String?
   funil            String?
+  recovery_id      String?
 
   // Visível apenas para admin
   data_pedido      DateTime?
@@ -42,6 +44,7 @@ model Pedido {
   fbclid           String?
   ip               String?
 
+  recuperacao       Int      @default(0)
   tentativa_geracao Int      @default(0)
   tentativa_envio   Int      @default(0)
 

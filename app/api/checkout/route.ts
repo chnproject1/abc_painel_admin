@@ -96,10 +96,19 @@ export async function POST(req: NextRequest) {
   if (data.action === "update") {
     if (!data.id) return erro("id obrigatório", 400);
 
-    await prisma.pedido.update({
+    const pedido = await prisma.pedido.update({
       where: { id: data.id },
       data: { status: "pago" },
+      select: { recovery_id: true },
     });
+
+    // Se veio de recuperação, marca o original como recuperado
+    if (pedido.recovery_id) {
+      await prisma.pedido.update({
+        where: { id: pedido.recovery_id },
+        data: { status: "recuperado" },
+      }).catch(() => null);
+    }
 
     return ok({ message: "Status atualizado para pago" });
   }
@@ -128,7 +137,9 @@ export async function POST(req: NextRequest) {
       letra:        data.letra       || null,
       ip:           data.ip          || null,
       cpf:          data.cpf         || "00000000000",
+      nomefiscal:   data.nomefiscal  || null,
       funil:        data.funil       || null,
+      recovery_id:  data.recovery_id || null,
       data_pedido:  new Date(),
     },
     update: {
@@ -149,7 +160,9 @@ export async function POST(req: NextRequest) {
       letra:        data.letra       || undefined,
       ip:           data.ip          || undefined,
       cpf:          data.cpf         || undefined,
+      nomefiscal:   data.nomefiscal  || undefined,
       funil:        data.funil       || undefined,
+      recovery_id:  data.recovery_id || undefined,
     },
   });
 
