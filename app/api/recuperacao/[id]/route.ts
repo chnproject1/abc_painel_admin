@@ -25,6 +25,7 @@ export async function GET(
       letra:        true,
       cpf:          true,
       nomefiscal:   true,
+      funil:        true,
       utm_source:   true,
       utm_campaign: true,
       utm_medium:   true,
@@ -59,6 +60,7 @@ export async function GET(
     `&utm_term=${p(pedido.utm_term)}` +
     `&utm_id=${p(pedido.utm_id)}` +
     `&fbclid=${p(pedido.fbclid)}` +
+    `&funil=${p(pedido.funil)}` +
     `&recovery_id=${p(pedido.id)}`;
 
   return NextResponse.redirect(url, 302);

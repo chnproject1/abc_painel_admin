@@ -30,12 +30,14 @@ export async function GET() {
       },
     }),
 
-    // Pagaram mas música não foi gerada
+    // Pagaram mas música não foi gerada e ainda não foram entregues
     prisma.pedido.count({
       where: {
         ...filtroBase,
         status: "pago",
         gerou_musica: false,
+        entrega_whatsapp: false,
+        entrega_email: false,
       },
     }),
   ]);
