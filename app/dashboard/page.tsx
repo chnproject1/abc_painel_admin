@@ -139,7 +139,6 @@ function DashboardContent() {
   const [carregandoFiltro, setCarregandoFiltro] = useState(false);
 
   useEffect(() => {
-    fetch("/api/stats").then(r => r.json()).then(setStats).catch(() => {});
     const q     = searchParams.get("q");
     const view  = searchParams.get("view");
     const page  = parseInt(searchParams.get("page") ?? "1");
@@ -151,9 +150,10 @@ function DashboardContent() {
     if (view || plano) { carregarFiltro(view ?? "todos", page, data, desde, ate, plano); }
   }, []);
 
-  // Busca planos apenas quando a sessão carregar e confirmar admin
+  // Busca stats e planos apenas quando a sessão confirmar admin
   useEffect(() => {
     if (isAdmin) {
+      fetch("/api/stats").then(r => r.json()).then(setStats).catch(() => {});
       fetch("/api/planos").then(r => r.json()).then(setPlanos).catch(() => {});
     }
   }, [isAdmin]);
@@ -276,8 +276,8 @@ function DashboardContent() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-        {/* Stats clicáveis */}
-        {stats && (
+        {/* Stats clicáveis — apenas admin */}
+        {isAdmin && stats && (
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -330,8 +330,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Filtros e lista — ocultos durante busca */}
-        {!buscaFeita && <>
+        {/* Filtros e lista — apenas admin, ocultos durante busca */}
+        {isAdmin && !buscaFeita && <>
 
         {/* Filtro por data */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-6">
