@@ -21,3 +21,8 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Arquivos locais que não vão pro deploy
+.claude/
+*.xlsx
+scripts/insert-lost-records-*.js

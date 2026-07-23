@@ -16,10 +16,15 @@ export async function GET(req: NextRequest) {
 
   const buffer = await res.arrayBuffer();
 
+  // Headers HTTP só aceitam Latin-1 (bytes 0–255). Nomes com emoji/acento
+  // (ex.: "🎵", "João") quebram o header. Fallback ASCII + versão UTF-8 (RFC 5987).
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_") || "audio.mp3";
+  const utf8Encoded   = encodeURIComponent(filename);
+
   return new NextResponse(buffer, {
     headers: {
       "Content-Type":        "audio/mpeg",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${utf8Encoded}`,
     },
   });
 }

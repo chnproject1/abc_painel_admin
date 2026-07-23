@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       utm_term: true,
       utm_id: true,
       fbclid: true,
+      pixel_id: true,
       ip: true,
     },
   });
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
       utm_term:          pedido.utm_term,
       utm_id:            pedido.utm_id,
       fbclid:            pedido.fbclid,
+      pixel_id:          pedido.pixel_id,
       ip:                pedido.ip,
     },
   });
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
       utm_term:     data.utm_term    || null,
       utm_id:       data.utm_id      || null,
       fbclid:       data.fbclid      || null,
+      pixel_id:     data.pixel_id    || null,
       estilo:       data.estilo      || null,
       letra:        data.letra       || null,
       ip:           data.ip          || null,
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
       utm_term:     data.utm_term    || undefined,
       utm_id:       data.utm_id      || undefined,
       fbclid:       data.fbclid      || undefined,
+      pixel_id:     data.pixel_id    || undefined,
       estilo:       data.estilo      || undefined,
       letra:        data.letra       || undefined,
       ip:           data.ip          || undefined,

@@ -45,6 +45,7 @@ export const CAMPOS_ADMIN_EXTRAS = [
   "utm_term",
   "utm_id",
   "fbclid",
+  "pixel_id",
   "ip",
 ] as const;
 
