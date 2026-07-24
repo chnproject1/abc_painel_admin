@@ -42,6 +42,7 @@ model Pedido {
   utm_term         String?
   utm_id           String?
   fbclid           String?
+  ttclid           String?
   pixel_id         String?
   ip               String?
 

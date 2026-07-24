@@ -33,6 +33,7 @@ export async function GET(
       utm_term:     true,
       utm_id:       true,
       fbclid:       true,
+      ttclid:       true,
       pixel_id:     true,
     },
   });
@@ -61,6 +62,7 @@ export async function GET(
     `&utm_term=${p(pedido.utm_term)}` +
     `&utm_id=${p(pedido.utm_id)}` +
     `&fbclid=${p(pedido.fbclid)}` +
+    `&ttclid=${p(pedido.ttclid)}` +
     `&pixel_id=${p(pedido.pixel_id)}` +
     `&funil=${p(pedido.funil)}` +
     `&recovery_id=${p(pedido.id)}`;
