@@ -9,6 +9,7 @@ node_modules/
 # Build
 .next/
 out/
+*.tsbuildinfo
 
 # Logs
 *.log
@@ -26,3 +27,10 @@ Thumbs.db
 .claude/
 *.xlsx
 scripts/insert-lost-records-*.js
+
+# Lotes gerados para a Spedy (o registro fica no OneDrive, não no git)
+exports/
+
+# Tabela de endereços por DDD — ~9 MB de dado derivado, regenerável com
+# `npm run spedy:ceps`. Fica fora do git; o backup é o próprio OneDrive.
+lib/ceps/

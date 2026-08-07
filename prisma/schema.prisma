@@ -32,6 +32,10 @@ model Pedido {
   funil            String?
   recovery_id      String?
 
+  // Controle de emissão de nota fiscal (Spedy) — ver SPEDY.md
+  nota_importada   Boolean   @default(false)
+  nota_lote        String?
+
   // Visível apenas para admin
   data_pedido      DateTime?
   valor            Decimal?  @db.Decimal(10, 2)

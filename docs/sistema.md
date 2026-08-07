@@ -215,17 +215,28 @@ abc-music-admin/
 ├── lib/
 │   ├── auth.ts                   # Configuração NextAuth + bcrypt
 │   ├── prisma.ts                 # Cliente Prisma (singleton)
-│   └── columns.ts                # Controle de colunas visíveis por perfil
+│   ├── columns.ts                # Controle de colunas visíveis por perfil
+│   ├── spedy.js                  # Tradução Pedido → planilha de NF-e (só scripts usam)
+│   └── ceps/                     # Tabela de endereços por DDD, gerada pela raspagem
 ├── prisma/
 │   └── schema.prisma             # Esquema do banco de dados
 ├── middleware.ts                 # Proteção de rotas autenticadas
+├── docs/
+│   ├── README.md                 # Índice da documentação
+│   ├── sistema.md                # Este documento
+│   ├── deploy-vps.md             # Deploy na VPS
+│   ├── emissao-nfe-manual.md     # NF-e: como operar
+│   └── emissao-nfe-codigo.md     # NF-e: como o código funciona
 ├── scripts/
 │   ├── import-xlsx.js            # Importação do histórico do Google Sheets
 │   ├── criar-usuario.js          # Criação de usuários (ADMIN/OPERADOR/PRODUTOR)
 │   ├── corrigir-booleanos.js     # Correção de campos booleanos pós-importação
 │   ├── teste-fluxo.js            # Simulação do fluxo completo (checkout → pagamento)
-│   ├── insert-teste.sql          # SQL para inserir pedido de teste manual
-│   └── n8n-portal-nodes.json     # Nós HTTP prontos para importar no n8n
+│   ├── n8n-portal-nodes.json     # Nós HTTP prontos para importar no n8n
+│   ├── gerar-tabela-ddd-cep.js   # NF-e: raspa os endereços por DDD (roda uma vez)
+│   ├── marcar-historico-spedy.js # NF-e: backfill do histórico (roda uma vez)
+│   ├── gerar-lote-spedy.js       # NF-e: gera o lote da semana
+│   └── marcar-lote-spedy.js      # NF-e: confirma o lote importado
 └── .env                          # Variáveis de ambiente (nunca commitar)
 ```
 
