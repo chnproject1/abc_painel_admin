@@ -35,36 +35,91 @@ funciona nas duas hipóteses.
 Este array é a única fonte da ordem: é usado tanto para montar a linha quanto para escrever
 o cabeçalho, então os dois nunca divergem.
 
-## `PADROES` — [linha 46](../lib/spedy.js:46)
+## `PADROES` e `STATUS_FATURAVEIS` — [linhas 46 e 57](../lib/spedy.js:57)
 
 ```js
+const STATUS_FATURAVEIS = ["pago", "cancelado"];
+
 const PADROES = {
-  formaPagamento: "PIX",         // o checkout é PIX via AbacatePay
-  status: "Aprovado",            // só exportamos pedidos já pagos
+  formaPagamento: "PIX",
+  status: "Aprovado",
   enviarEmail: "Sim",
   perfil: "Produtor",
-  transmitirNota: "Manualmente", // entra na Spedy sem transmitir
+  transmitirNota: "Manualmente",
   modeloNf: "nfe",
   pais: "Brasil",
-  numeroEndereco: "S/N",
+  numeroEndereco: "0",
+  produtoCod: "S200",
+  produtoDescricao: "SENTINDO O PODER DA MUSICA ISBN 9786502267752",
 };
 ```
 
-`transmitirNota: "Manualmente"` é a decisão mais importante daqui. As vendas entram na Spedy
-mas as notas **não são transmitidas sozinhas** — dá espaço para conferir antes.
+**`cancelado` está entre os faturáveis** porque o portal não tem cancelamento de verdade. O
+único lugar do sistema que grava esse status é o botão "Contato inválido" em
+`app/dashboard/pedido/[id]/page.tsx:127`, usado quando a música não pôde ser entregue — a
+venda aconteceu e o dinheiro entrou. Sem isso, 19 vendas de julho ficariam sem nota.
 
-## `NOME_PLANO` — [linha 60](../lib/spedy.js:60)
+Se um dia existir estorno, ele vai precisar de status próprio; reaproveitar `cancelado` faria
+sair nota para venda desfeita.
 
-Só embeleza a descrição: `silver` → "Música personalizada — plano Silver". Plano fora do mapa
-usa o valor cru, então nada quebra.
+`transmitirNota: "Manualmente"` é a outra decisão que importa: as vendas entram na Spedy mas
+as notas **não são transmitidas sozinhas**, o que dá espaço para conferir antes.
 
-**Não existe lista de planos permitidos, e é intencional.** A tributação da NF-e (NCM, CFOP,
-unidade) vem da configuração global em *Configurações > NF-e* na Spedy e vale para todas as
-vendas — os planos não precisam de cadastro individual de produto. Um portão de validação
-aqui só criaria bloqueio falso: uma venda paga ficaria de fora do lote por causa do nome do
-plano, mesmo com a nota perfeitamente emissível. Plano novo entra sozinho.
+O produto é único — mesmo código e mesma descrição para todos os planos, porque o que se
+vende fiscalmente é um item só, cadastrado na Spedy com o ISBN.
 
-## `dirExports()`, `mesDoLote()` e `dirLote()` — [linhas 71 a 96](../lib/spedy.js:71)
+## `MAX_TEXTO` e a limpeza de texto — [linha 79](../lib/spedy.js:79)
+
+Quatro funções trabalham em sequência para deixar um texto pronto para a nota.
+
+**`semAcento`** tira acento e troca qualquer caractere fora de `[A-Za-z0-9 ]` por **espaço**,
+não por vazio: `Sao Jose-SP` precisa virar `Sao Jose SP` e não `Sao JoseSP`. Em julho havia
+280 pares de parênteses, 202 hífens e 50 apóstrofos nos endereços.
+
+**`cortarEmPalavra`** corta na última palavra que cabe inteira.
+
+**`encurtarNome`** descarta os nomes do meio quando o texto estoura o limite:
+`Moacir Ferreira e Neila Ap de Sa Ferreira` (41) vira `Moacir Ferreira`. Só serve para nome
+de pessoa — em endereço o mesmo critério transformaria
+`Avenida Vereador Francisco de Paula Gomes dos Santos` em `Avenida Santos`, que é outra rua.
+
+**`limparTexto`** é o caminho do endereço: limpa e corta pelo começo, preservando o que
+identifica a rua.
+
+`MAX_TEXTO` é 40. A NF-e aceita 60; com 40, só 3 nomes dos 7.614 de julho foram abreviados —
+o p99 é 29.
+
+## `PREFIXOS_NOME` e `pareceNome()` — [linhas 184 e 209](../lib/spedy.js:184)
+
+```js
+const PALAVRAS_NAO_NOME = new Set([
+  "musica", "amor", "quero", "chama", "chamo", "agente", "pra", "para",
+  "nossa", "nosso", "meu", "minha", "sem", "feliz", "aniversario",
+  "homenagem", "surpresa", "obrigada", "obrigado",
+]);
+
+function pareceNome(v) {
+  const n = limparNome(v);
+  if (!n) return false;
+  return !n.toLowerCase().split(" ").some((w) => PALAVRAS_NAO_NOME.has(w));
+}
+```
+
+O campo de nome fiscal recebe três coisas diferentes na prática, e cada uma tem tratamento.
+
+**Nome com prefixo** — `Nome Alcir Vacht`, `Meu nome Moziel Cassiano`. O `PREFIXOS_NOME`
+remove; ninguém se chama "Nome".
+
+**Nome longo** — resolvido pelo `encurtarNome`.
+
+**Recado** — `Quero deixar sem meu nome`, `Nossa musica e so pra contrariar o nome da
+musica`. Vira pendência, para alguém preencher o nome real. Foram 3 em julho.
+
+**É um `Set` comparado palavra a palavra, não um regex de busca.** A comparação exata é o que
+impede `Maria das Dores de Amorim` de casar com "amor", `Sempre Silva` com "sem" e `Parana
+Ribeiro` com "para". Uma versão anterior usava busca de substring e barrava os três.
+
+## `dirExports()`, `mesDoLote()` e `dirLote()` — [linhas 90 a 96](../lib/spedy.js:90)
 
 ```js
 function dirExports() {
@@ -99,7 +154,7 @@ ter vários lotes se você fatiar por semana ou refizer um — e a pasta do lote
 remessa. Os arquivos dentro mantêm o rótulo no nome mesmo sendo redundante com a pasta: um
 `.xlsx` baixado ou anexado num e-mail continua identificável fora do contexto da pasta.
 
-## `normalizarTelefone()` — [linha 148](../lib/spedy.js:148)
+## `normalizarTelefone()` — [linha 233](../lib/spedy.js:233)
 
 ```js
 function normalizarTelefone(v) {
@@ -120,12 +175,12 @@ os DDDs falsos `01` a `09`.
 O corte do `55` só acontece com mais de 11 dígitos, senão um número de DDD 55 (Santa Maria)
 seria mutilado. O segundo `replace` cobre `0055...`.
 
-## `dddDe()` — [linha 154](../lib/spedy.js:154)
+## `dddDe()` — [linha 239](../lib/spedy.js:239)
 
 Os 2 primeiros dígitos do telefone normalizado, e só se sobrarem ao menos 10. Telefone curto
 ou lixo devolve `null`.
 
-## `DDDS_VALIDOS` — [linha 162](../lib/spedy.js:162)
+## `DDDS_VALIDOS` — [linha 247](../lib/spedy.js:247)
 
 Os 67 DDDs em uso no Brasil, como `Set`. Serve para distinguir dois problemas que exigem
 ações opostas:
@@ -136,7 +191,19 @@ ações opostas:
 Sem essa distinção, a mensagem seria "sem tabela para o DDD 23" e apontaria para a solução
 errada. É também a lista autoritativa usada por `gerar-tabela-ddd-cep.js`.
 
-## `cpfValido()` — [linha 175](../lib/spedy.js:175)
+## `formatarCpf()` e `formatarCep()`
+
+CPF em 11 dígitos corridos, CEP em 8, sem ponto nem traço. Os dois usam `padStart` com zero.
+
+No CPF isso também **recupera o zero perdido**: um CPF que virou número em algum ponto do
+caminho chega com 10 dígitos, e `"1234567890"` é na verdade `"01234567890"`. Como o dígito
+verificador é conferido logo depois, uma restauração errada não passa despercebida.
+
+Em julho, **2.675 CPFs e 645 CEPs começam com zero** — se saíssem como número na planilha,
+todos perderiam o primeiro dígito. É por isso que as células do `.xlsx` precisam ser do tipo
+texto, e há um teste que confere isso depois de gerar.
+
+## `cpfValido()` — [linha 260](../lib/spedy.js:260)
 
 Calcula os dois dígitos verificadores:
 
@@ -155,7 +222,7 @@ que passam na conta mas não são CPFs reais.
 A Spedy só descobre CPF inválido na hora de transmitir — depois de a venda já estar lançada.
 Validar antes evita ficar com venda importada e nota travada.
 
-## `dataBR()` — [linha 202](../lib/spedy.js:202)
+## `dataBR()` — [linha 302](../lib/spedy.js:302)
 
 ```js
 return new Intl.DateTimeFormat("pt-BR", {
@@ -168,44 +235,43 @@ new Date()` em [app/api/checkout/route.ts:158](../app/api/checkout/route.ts:158)
 22h do dia 31 é o dia seguinte em UTC — sem o fuso, sairia com data `01/08` e cairia na
 competência errada.
 
-## `inicioDoDiaBR()` — [linha 223](../lib/spedy.js:223)
+## `inicioDoDiaBR()` — [linha 323](../lib/spedy.js:323)
 
 O caminho inverso: converte `"2026-07-01"` no instante UTC da meia-noite em São Paulo,
 somando as 3 horas de diferença. É o que faz o corte do backfill cair exatamente na virada
 do dia no Brasil.
 
-## `listaDeCeps()` — [linha 234](../lib/spedy.js:234)
+## `listaDeCeps()` — [linha 334](../lib/spedy.js:334)
 
 Lê `lib/ceps/{ddd}.json` e guarda num `Map`. O cache evita reler o arquivo a cada pedido: num
 lote de 200 vendas do DDD 11, o `11.json` (7.346 endereços) é lido do disco **uma vez**, não
 200. O `Map` guarda também o resultado negativo (`null`), então um DDD sem tabela não é
 reprocurado.
 
-## `enderecoPara()` — [linha 269](../lib/spedy.js:269)
+## `dddDoPedido()` e `enderecoPara()`
 
 ```js
 function enderecoPara(pedido) {
-  const ddd = dddDe(pedido.telefone);
-  if (!ddd) return null;
-  const lista = listaDeCeps(ddd);
+  const ddd = dddDoPedido(pedido) || dddsDisponiveis()[Math.floor(Math.random() * dddsDisponiveis().length)];
+  const lista = ddd && listaDeCeps(ddd);
   if (!lista) return null;
   return lista[Math.floor(Math.random() * lista.length)];
 }
 ```
 
-Sorteia um endereço da região do DDD do cliente. Devolve `null` nos dois casos em que não dá
-para seguir, e quem trata é o `validar()`.
+Com telefone válido, sorteia dentro do DDD do cliente — o endereço não é o dele, mas ao menos
+é da região.
 
-O endereço não é o do cliente: o checkout não coleta endereço e a NF-e não é transmitida sem
-endereço de destinatário. É um endereço real e coerente (CEP, bairro, município e UF saem
-todos do mesmo registro dos Correios), o que faz passar na validação da SEFAZ.
+**Sem telefone utilizável, sorteia o DDD também.** 55 pedidos de julho chegaram com só o DDD
+gravado ou menos, truncados já no checkout; o extrato do AbacatePay tinha o mesmo valor
+quebrado, então não havia de onde recuperar. Como o celular é opcional na NF-e, um telefone
+ruim não pode bloquear a emissão — nesses casos `Cliente_celular` sai **vazio** em vez de
+sair pela metade, e o endereço vem de um DDD qualquer.
 
-O sorteio é aleatório de verdade, sem semente. Isso é seguro porque o `.xlsx` gerado é o
-registro do que foi enviado — mas implica que **regerar um lote já importado produz endereços
-diferentes** e quebra a correspondência com as notas emitidas. Está documentado como regra de
-operação em [manual de operação](emissao-nfe-manual.md).
+`dddsDisponiveis()` lista só os DDDs que têm arquivo em `lib/ceps/`, calculado uma vez por
+execução.
 
-## `validar()` — [linha 293](../lib/spedy.js:293)
+## `validar()`
 
 Devolve um array de motivos. Vazio = apto. Um pedido pode acumular vários:
 
@@ -213,18 +279,27 @@ Devolve um array de motivos. Vazio = apto. Um pedido pode acumular vários:
 |---|---|
 | CPF vazio / `00000000000` / ≠ 11 dígitos / DV inválido | 4 mensagens distintas |
 | `valor` nulo ou ≤ 0 | `valor ausente` / `valor zerado ou negativo` |
-| `nomefiscal` e `nome` vazios | `nome do cliente ausente` |
-| telefone sem DDD | `telefone sem DDD reconhecível` |
-| DDD fora de `DDDS_VALIDOS` | `DDD 23 não existe — corrigir o telefone` |
-| DDD sem arquivo em `lib/ceps/` | `sem tabela de endereços para o DDD 11 — rodar spedy:ceps` |
+| `nomefiscal` vazio | `nome fiscal ausente` |
+| `nomefiscal` com cara de recado | `nome fiscal não parece nome de pessoa ("...")` |
+| DDD do pedido sem arquivo em `lib/ceps/` | `sem tabela de endereços para o DDD 11` |
 | sem `data_pedido` nem `criado_em` | `sem data do pedido` |
 
-As mensagens são específicas de propósito e terminam apontando a ação. O `00000000000` tem
-checagem própria porque é o `@default` da coluna em
-[prisma/schema.prisma:30](../prisma/schema.prisma:30) — é o caso mais comum, não um CPF digitado
-errado.
+Duas coisas que **não** bloqueiam, de propósito:
 
-## `montarLinha()` — [linha 339](../lib/spedy.js:339)
+**Telefone.** É opcional na NF-e, e quando vem truncado o endereço passa a ser sorteado entre
+todos os DDDs. Bloquear por isso deixaria 55 vendas de julho sem nota.
+
+**Plano.** A tributação vem da configuração global da Spedy, e o produto é único (`S200`), então
+o nome do plano não influencia a emissão.
+
+O CPF é validado **depois** do `formatarCpf`, que restaura o zero à esquerda — um CPF que
+perdeu o zero por ter virado número em algum ponto é conferido corretamente.
+
+O nome usa só `nomefiscal`, nunca o `nome`: cruzando 523 pedidos com o extrato do AbacatePay,
+`nomefiscal` bateu com o pagador em 97,6% e `nome` em 8,8%, porque `nome` é o homenageado da
+música. Um fallback colocaria a pessoa errada na nota, em silêncio.
+
+## `montarLinha()` — [linha 439](../lib/spedy.js:439)
 
 Monta o objeto de 30 chaves. O truque está no final:
 
@@ -237,7 +312,7 @@ completa o resto varrendo `COLUNAS`. Se uma coluna for acrescentada no array, el
 na planilha em vez de sumir. `Cliente_razaosocial` e `Cliente_inscricaoestadual` caem nesse
 preenchimento — todos os clientes são PF.
 
-## `processar()` — [linha 375](../lib/spedy.js:375)
+## `processar()` — [linha 475](../lib/spedy.js:475)
 
 Roda `validar()` em cada pedido e separa em dois baldes. Quem passa vira linha da planilha;
 quem não passa vira linha da planilha de pendências, com `Motivo` sendo os erros unidos por
@@ -534,7 +609,7 @@ Lê a planilha de pendências corrigida à mão e grava no banco. É o que fecha
 A planilha de pendências é gerada por `planilhaPendencias()` com três colunas editáveis —
 `Cliente_nome`, `Cliente_cpfcnpj`, `Cliente_celular` — e as `ref_*` só de contexto.
 
-O detalhe que faz a volta funcionar está em `processar()`, [linha 375](../lib/spedy.js:375):
+O detalhe que faz a volta funcionar está em `processar()`, [linha 475](../lib/spedy.js:475):
 as colunas editáveis trazem o valor **cru do banco**, sem nenhum fallback. `Cliente_nome`
 mostra apenas `nomefiscal`; se estiver vazio, sai vazio. A versão anterior caía para `nome`,
 e como `nome` é o homenageado da música, uma correção manual gravaria a pessoa errada como

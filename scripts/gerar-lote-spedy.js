@@ -40,7 +40,7 @@ const fs = require("fs");
 const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const {
-  SELECT_PEDIDO, hojeISO, inicioDoDiaBR, processar, planilhaVendas, planilhaPendencias, dirLote,
+  SELECT_PEDIDO, STATUS_FATURAVEIS, hojeISO, inicioDoDiaBR, processar, planilhaVendas, planilhaPendencias, dirLote,
 } = require("../lib/spedy");
 
 const prisma = new PrismaClient();
@@ -138,7 +138,7 @@ async function main() {
     : janela;
 
   const pedidos = await prisma.pedido.findMany({
-    where: { status: "pago", nota_importada: false, ...criterio },
+    where: { status: { in: STATUS_FATURAVEIS }, nota_importada: false, ...criterio },
     select: SELECT_PEDIDO,
     orderBy: { criado_em: "asc" },
   });

@@ -49,7 +49,7 @@ repassar argumentos. `npm.cmd run ...` também funciona, por usar o wrapper `.cm
 
 ---
 
-# Estado atual (06/08/2026)
+# Estado atual (07/08/2026)
 
 | | |
 |---|---|
@@ -57,46 +57,79 @@ repassar argumentos. `npm.cmd run ...` também funciona, por usar o wrapper `.cm
 | Backfill até 30/06/2026 | ✅ 96.865 pedidos como `historico` |
 | Pedidos de 01/07 do CNPJ anterior | ✅ 804 como `historico` |
 | Tabela de endereços | ✅ 67 DDDs, 67.000 endereços |
-| **Lote de julho** | `2026-07-31` — **7.613 notas, R$ 335.085, zero pendências** |
+| **Lote de julho** | `2026-07-31` — **7.611 notas, R$ 335.001** |
+| Pendências de julho | 3 — nomes que não são nome de pessoa |
 | Julho importado na Spedy | ⬜ **não** — falta importar e rodar o `spedy:marcar` |
 | Agosto conciliado até 06/08 | ✅ 1.157/1.157 |
-| Agosto na fila | 1.160 pedidos, R$ 51.340 |
 
 Ordem de grandeza: ~110 mil pedidos na base, ~53 mil pagos.
 
-> **A ordem importa agora.** Os 7.613 de julho continuam na fila porque o lote não foi
-> marcado. Enquanto isso, um lote de agosto levaria julho junto — o `--ate` só corta em
-> cima. Importe julho, rode `spedy:marcar 2026-07-31`, e só então feche agosto.
+> **A ordem importa agora.** Julho continua na fila porque o lote não foi marcado. Enquanto
+> isso, um lote de agosto levaria julho junto — o `--ate` só corta em cima. Importe julho,
+> rode `spedy:marcar 2026-07-31`, e só então feche agosto.
 
-## Exigências do contador aplicadas
+## Regras de formato exigidas pelo contador
 
-- **Nome do cliente sem acento** — `João Conceição` sai como `Joao Conceicao`. Vale também
-  para logradouro e bairro. A **cidade mantém o acento**, porque o nome do município é
-  chave de busca na Spedy e `Sao Paulo` pode não casar com o cadastro do IBGE.
-- **Descrição do produto sem hífen** — `Musica personalizada plano Silver`.
-- **Nome pode ter uma palavra só** — só não pode ficar vazio.
+Todas aplicadas em `lib/spedy.js` e verificadas a cada geração.
 
-Dois pontos dele continuam em aberto: o prazo de garantia (ver
-[Passo 4](#passo-4--transmitir-as-notas)) e o que seria o "título do e-book" na descrição
-da nota.
+| Regra | Como sai |
+|---|---|
+| CPF sem ponto nem traço | 11 dígitos corridos — `02642063984` |
+| CEP sem traço | 8 dígitos corridos — `87730005` |
+| Zero à esquerda preservado | 2.675 CPFs e 645 CEPs de julho começam com zero |
+| Texto sem caractere especial | acento, hífen, ponto e parênteses viram espaço |
+| Texto curto | no máximo **40** caracteres |
+| Número do endereço | `0` (não coletamos número) |
+| Código do produto | `S200` |
+| Descrição do produto | `SENTINDO O PODER DA MUSICA ISBN 9786502267752` |
+
+O limite de 40 é a constante `MAX_TEXTO`. A NF-e aceita 60; com 40, apenas 3 nomes dos 7.614
+de julho precisaram ser abreviados.
+
+### Zero à esquerda: por que não se perde
+
+As células saem como **texto** no `.xlsx`, não como número. Se saíssem numéricas, o Excel
+comeria o primeiro dígito e 2.675 CPFs ficariam com 10. Há um teste que confere o tipo da
+célula depois de gerar.
+
+### Como o nome é tratado
+
+**Prefixo removido.** O cliente às vezes escreve `Nome Alcir Vacht` ou `Meu nome Moziel
+Cassiano`. Vira `Alcir Vacht` e `Moziel Cassiano`.
+
+**Nome longo perde o meio.** `Moacir Ferreira e Neila Ap de Sa Ferreira` → `Moacir Ferreira`.
+
+**Endereço longo mantém o começo**, e não o meio: `Avenida Vereador Francisco de Paula Gomes
+dos Santos` → `Avenida Vereador Francisco de Paula`. Descartar o meio como no nome viraria
+`Avenida Santos`, que é outra rua.
+
+**Recado vira pendência.** Quando o campo tem `Quero deixar sem meu nome` ou `Nossa musica e
+so pra contrariar o nome da musica`, o pedido é bloqueado em vez de sair com isso na nota.
+Foram 3 em julho.
+
+A detecção compara palavra a palavra contra uma lista (`musica`, `amor`, `quero`, `chama`…),
+nunca por busca de texto: `Maria das Dores de Amorim`, `Sempre Silva` e `Parana Ribeiro`
+passam, embora contenham "amor", "sem" e "para" como substring.
+
+## `cancelado` também gera nota
+
+O botão **"Contato inválido"** do portal grava `status: "cancelado"`, e é o **único lugar em
+todo o sistema** que grava esse status. Não existe cancelamento de verdade — a venda
+aconteceu, o dinheiro entrou, só a entrega falhou.
+
+Por isso `STATUS_FATURAVEIS = ["pago", "cancelado"]`. Sem isso, 19 vendas de julho ficariam
+sem nota.
+
+> **Se um dia existir estorno, ele precisa de status próprio.** Reaproveitar `cancelado`
+> faria sair nota para venda desfeita.
 
 ## Um caso resolvido que vale lembrar
 
 A troca de CNPJ aconteceu no meio de **01/07/2026**: último pedido do CNPJ anterior às
 22:39, primeiro do novo às 22:50. Os 449 pagos anteriores àquele horário foram marcados como
-`historico` para nunca entrarem em lote do CNPJ atual. É por isso que julho tem 7.613 notas e
-não ~8.060.
+`historico` para nunca entrarem em lote do CNPJ atual.
 
-## Exigências do contador aplicadas
-
-- **Nome do cliente sem acento** — `João Conceição` sai como `Joao Conceicao`. Vale também
-  para logradouro e bairro. A **cidade mantém o acento**, porque o nome do município é
-  chave de busca na Spedy e `Sao Paulo` pode não casar com o cadastro do IBGE.
-- **Descrição do produto sem hífen** — `Musica personalizada plano Silver`.
-
-Dois pontos dele continuam em aberto: o prazo de garantia (ver
-[Passo 4](#passo-4--transmitir-as-notas)) e o que seria o "título do e-book" na descrição
-da nota.
+Também foram marcados 3 pedidos de teste de R$ 1 com nome "Cliente".
 
 ---
 
@@ -306,6 +339,7 @@ O console resume por motivo; o detalhe de cada pedido está em `spedy-pendencias
 | `CPF é o valor padrão (00000000000)` | Pedir o CPF ao cliente, ou buscar no extrato do AbacatePay |
 | `CPF com dígito verificador inválido` | CPF digitado errado — conferir com o cliente |
 | `nome fiscal ausente` | Preencher com o nome de **quem pagou** |
+| `nome fiscal não parece nome de pessoa` | O cliente escreveu um recado no campo. Preencher o nome real |
 | `valor ausente` | Corrigir no portal (não é editável na planilha) |
 | `sem tabela de endereços para o DDD 11 — rodar spedy:ceps` | Falta raspar aquele DDD |
 
@@ -380,17 +414,17 @@ recorte do nosso caso: **NF-e, cliente PF**. O detalhamento coluna por coluna es
 | `Venda_data` | `data_pedido`, fallback `criado_em`, fuso de São Paulo |
 | `Venda_dataaprovacao` | mesma data — o PIX aprova na hora |
 | `Venda_valortotal` | `valor`, 2 casas com ponto decimal |
-| `Venda_produtodescricao` | "Música personalizada — plano Silver" |
+| `Venda_produtodescricao` | fixo: `SENTINDO O PODER DA MUSICA ISBN 9786502267752` |
 | `modelo_nf` | `nfe`, fixo |
-| `Cliente_cpfcnpj` | `cpf` — obrigatório em nota de **produto** |
-| `Cliente_nome` | `nomefiscal`, ou `nome` se vazio |
+| `Cliente_cpfcnpj` | `cpf` em 11 dígitos corridos — obrigatório em nota de **produto** |
+| `Cliente_nome` | `nomefiscal` — nunca o `nome`, que é o homenageado |
 
 ## Obrigatórias para transmitir — 6
 
 A planilha **importa** com essas vazias, mas a NF-e não é **transmitida** sem endereço de
 destinatário. Todas vêm sorteadas da tabela do DDD do telefone.
 
-`Cliente_endereco_logradouro` · `Cliente_endereco_numero` (`S/N`) ·
+`Cliente_endereco_logradouro` · `Cliente_endereco_numero` (`0`) ·
 `Cliente_endereco_bairro` · `Cliente_endereco_cep` · `Cliente_endereco_cidade` ·
 `Cliente_endereco_estado`
 
@@ -401,8 +435,11 @@ registro dos Correios, batem por construção.
 
 `Venda_formapagamento` (`PIX`, senão viria "Outras") · `Venda_status` (`Aprovado`) ·
 `Venda_enviaremail` (`Sim`) · `Venda_perfil` (`Produtor`) · `Venda_transmitirnota`
-(`Manualmente`) · `Venda_produtocod` (`plano`) · `Cliente_email` · `Cliente_celular` ·
+(`Manualmente`) · `Venda_produtocod` (`S200`) · `Cliente_email` · `Cliente_celular` ·
 `Cliente_endereco_pais` (`Brasil`)
+
+`Cliente_celular` sai **vazio** quando o telefone veio truncado — nesse caso o endereço é
+sorteado entre todos os DDDs, já que não dá para saber a região.
 
 `Cliente_email` é formalmente opcional, mas necessário na prática porque
 `Venda_enviaremail = Sim`.
