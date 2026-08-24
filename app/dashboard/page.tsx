@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import SeletorPais from "@/components/SeletorPais";
 
 interface Pedido {
   id: string;
@@ -264,14 +265,17 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div>
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-gray-900">abcMusic</h1>
-          <p className="text-xs text-gray-500">Olá, {session?.user?.name}</p>
+          <p className="text-xs text-gray-500 truncate">Olá, {session?.user?.name}</p>
         </div>
-        <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-sm text-gray-500 hover:text-gray-700">
-          Sair
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <SeletorPais />
+          <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-sm text-gray-500 hover:text-gray-700">
+            Sair
+          </button>
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
@@ -480,7 +484,7 @@ function DashboardContent() {
                   <div className="flex items-center justify-center gap-2 mt-6">
                     <button
                       disabled={paginaAtual === 1}
-                      onClick={() => carregarFiltro(filtroAtivo ?? "todos", paginaAtual - 1, filtroData, filtroDesde, filtroPlano)}
+                      onClick={() => carregarFiltro(filtroAtivo ?? "todos", paginaAtual - 1, filtroData, filtroDesde, filtroAte, filtroPlano)}
                       className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                     >
                       ← Anterior
@@ -490,7 +494,7 @@ function DashboardContent() {
                     </span>
                     <button
                       disabled={paginaAtual === totalPaginas}
-                      onClick={() => carregarFiltro(filtroAtivo ?? "todos", paginaAtual + 1, filtroData, filtroDesde, filtroPlano)}
+                      onClick={() => carregarFiltro(filtroAtivo ?? "todos", paginaAtual + 1, filtroData, filtroDesde, filtroAte, filtroPlano)}
                       className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
                     >
                       Próxima →

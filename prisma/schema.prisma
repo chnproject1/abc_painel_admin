@@ -62,6 +62,90 @@ model Pedido {
   @@index([status])
 }
 
+// Operação Estados Unidos — mesma função do model Pedido, colunas próprias.
+// Sem telefone/WhatsApp (contato só por email) e sem campos fiscais brasileiros.
+// Funil: venda inicial -> up1 (página Premium) -> up2 (2 músicas extras)
+//        -> ds (página Premium, só aparece se up1 e up2 forem recusados)
+model PedidoUs {
+  id            String    @id                  // ID da cobrança no Stripe (o mesmo durante toda a compra)
+
+  nome          String
+  email         String
+  nomefiscal    String?                        // nome de cobrança (Stripe)
+  zip_code      String?                        // CEP de cobrança (Stripe / AVS)
+  plano         String    @default("")         // basic | basic_up1 | basic_up2 | basic_up1_up2 | basic_ds (idem silver)
+  idioma        String    @default("en")
+
+  // Status por oferta — pendente | pago | recusado
+  status        String    @default("pendente") // venda inicial
+  up1_status    String?                        // upsell 1 — página Premium
+  up2_status    String?                        // upsell 2 — duas músicas extras
+  ds_status     String?                        // downsell — página Premium
+
+  estilo        String?
+  letra         String?   @db.Text
+
+  // Entrega principal: música 1 + página Premium (se up1 ou ds pago)
+  gerou_musica  Boolean   @default(false)
+  erro_geracao  Boolean   @default(false)
+  song_id       String?
+  link_audio    String?
+  link_basica   String?
+  link_pagina   String?
+  link_mp4      String?
+  data_entrega  DateTime?
+  entrega_email Boolean   @default(false)
+  tentativa_geracao Int   @default(0)
+  tentativa_envio   Int   @default(0)
+
+  // Entrega do upsell 2: músicas 2 e 3 (+ páginas, se up1 ou ds pago)
+  up_gerou_musica Boolean @default(false)
+  up_erro_geracao Boolean @default(false)
+  song_id2      String?
+  link_audio2   String?
+  link_basica2  String?
+  link_pagina2  String?
+  song_id3      String?
+  link_audio3   String?
+  link_basica3  String?
+  link_pagina3  String?
+  up_data_entrega   DateTime?
+  up_entrega_email  Boolean @default(false)
+  up_tentativa_geracao Int  @default(0)
+  up_tentativa_envio   Int  @default(0)
+
+  // Recuperação de carrinho
+  funil         String?
+  recovery_id   String?
+  recuperacao   Int       @default(0)
+
+  // Visível apenas para admin
+  data_pedido   DateTime?
+  valor         Decimal?  @db.Decimal(10, 2)   // venda inicial, em USD
+  up1_valor     Decimal?  @db.Decimal(10, 2)
+  up2_valor     Decimal?  @db.Decimal(10, 2)
+  ds_valor      Decimal?  @db.Decimal(10, 2)
+
+  utm_source    String?
+  utm_campaign  String?
+  utm_medium    String?
+  utm_content   String?
+  utm_term      String?
+  utm_id        String?
+  fbclid        String?
+  ttclid        String?
+  pixel_id      String?
+  ip            String?
+
+  criado_em     DateTime  @default(now())
+  atualizado_em DateTime  @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([plano])
+  @@index([data_pedido])
+}
+
 model Usuario {
   id       String  @id @default(cuid())
   email    String  @unique
