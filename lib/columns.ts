@@ -102,6 +102,8 @@ export const CAMPOS_US_OPERADOR = [
   "erro_geracao",
   "data_entrega",
   "entrega_email",
+  "pagina_entrega_email",
+  "pagina_data_entrega",
   "up_gerou_musica",
   "up_erro_geracao",
   "up_data_entrega",

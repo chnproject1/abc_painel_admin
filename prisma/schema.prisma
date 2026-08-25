@@ -100,6 +100,11 @@ model PedidoUs {
   tentativa_geracao Int   @default(0)
   tentativa_envio   Int   @default(0)
 
+  // Entrega da página Premium (liberada por up1 ou ds) — vai em e-mail
+  // separado, disparado pelo fluxo seguinte ao da música principal
+  pagina_entrega_email Boolean @default(false)
+  pagina_data_entrega  DateTime?
+
   // Entrega do upsell 2: músicas 2 e 3 (+ páginas, se up1 ou ds pago)
   up_gerou_musica Boolean @default(false)
   up_erro_geracao Boolean @default(false)

@@ -41,6 +41,7 @@ function montar({
   upGerouMusica = true,
   upErroGeracao = false,
   upEntregue = true,
+  paginaEntregue = true,
   diasAtras = 0,
 }) {
   const id = `cs_test_${String(n).padStart(3, "0")}`;
@@ -50,6 +51,8 @@ function montar({
 
   // O combo (downsell) entrega pagina + as duas musicas, igual ao upsell 2
   const temExtras = up2 === "pago" || ds === "pago";
+  // A pagina Premium e liberada pelo upsell 1 ou pelo downsell
+  const temPagina = up1 === "pago" || ds === "pago";
   const pagou = status === "pago";
 
   // A automação gera a página Premium de toda música, independente de o cliente
@@ -95,6 +98,12 @@ function montar({
     entrega_email: pagou && gerouMusica && entregue,
     tentativa_geracao: erroGeracao ? 2 : 1,
     tentativa_envio:   entregue ? 1 : 0,
+
+    // Entrega da página Premium (só existe se up1 ou ds foram pagos)
+    pagina_entrega_email: temPagina && gerouMusica && paginaEntregue,
+    pagina_data_entrega: temPagina && gerouMusica && paginaEntregue
+      ? new Date(dataPedido.getTime() + 54e5)
+      : null,
 
     // Entrega do upsell 2
     up_gerou_musica: temExtras && upGerouMusica,
@@ -167,8 +176,8 @@ const CASOS = [
   // Silver sem upsell
   { n: 10, nome: "Lucas Moreau", plano: "silver", up1: "recusado", up2: "recusado", ds: "recusado", diasAtras: 5 },
 
-  // Silver com upsell 1
-  { n: 11, nome: "Harper Lane", plano: "silver_up1", up1: "pago", up2: "recusado", diasAtras: 5 },
+  // Silver com upsell 1, página gerada mas AINDA NÃO ENVIADA
+  { n: 11, nome: "Harper Lane", plano: "silver_up1", up1: "pago", up2: "recusado", paginaEntregue: false, diasAtras: 5 },
 
   // Silver com upsell 2, extras entregues
   { n: 12, nome: "Elena Petrova", plano: "silver_up2", up1: "recusado", up2: "pago", diasAtras: 6 },

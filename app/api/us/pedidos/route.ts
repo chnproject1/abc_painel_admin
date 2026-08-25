@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
       where.status = "pago";
       where.OR = [
         { entrega_email: false },
+        { AND: [{ OR: [{ up1_status: "pago" }, { ds_status: "pago" }] }, { pagina_entrega_email: false }] },
         { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }] },
       ];
       break;

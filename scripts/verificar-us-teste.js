@@ -21,10 +21,12 @@ const w = (extra = {}) => ({ ...SO_TESTE, ...extra });
 // Mesmas cláusulas consolidadas de /api/us/stats e /api/us/pedidos:
 // pendente ou erro em QUALQUER entrega — principal ou extras.
 const TEM_EXTRAS = { OR: [{ up2_status: "pago" }, { ds_status: "pago" }] };
+const TEM_PAGINA = { OR: [{ up1_status: "pago" }, { ds_status: "pago" }] };
 const PENDENTE = {
   status: "pago",
   OR: [
     { entrega_email: false },
+    { AND: [TEM_PAGINA, { pagina_entrega_email: false }] },
     { AND: [TEM_EXTRAS, { up_entrega_email: false }] },
   ],
 };
@@ -61,7 +63,7 @@ function checar(rotulo, obtido, esperado) {
   checar("up1 pagos",          await prisma.pedidoUs.count({ where: w({ up1_status: "pago" }) }), 4);
   checar("up2 pagos",          await prisma.pedidoUs.count({ where: w({ up2_status: "pago" }) }), 5);
   checar("ds pagos",           await prisma.pedidoUs.count({ where: w({ ds_status: "pago" }) }), 2);
-  checar("pendentes_envio (todas as entregas)", await prisma.pedidoUs.count({ where: w(PENDENTE) }), 4);
+  checar("pendentes_envio (todas as entregas)", await prisma.pedidoUs.count({ where: w(PENDENTE) }), 5);
   checar("erro_geracao (todas as entregas)",    await prisma.pedidoUs.count({ where: w(ERRO) }), 2);
   checar("pendentes_envio_up", await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_entrega_email: false }) }), 2);
   checar("erro_geracao_up",    await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_gerou_musica: false, up_entrega_email: false }) }), 1);
@@ -83,7 +85,7 @@ function checar(rotulo, obtido, esperado) {
   const FILTROS = {
     todos:        [{}, 14],
     pagos:        [{ status: "pago" }, 13],
-    pendentes:    [PENDENTE, 4],
+    pendentes:    [PENDENTE, 5],
     erro:         [ERRO, 2],
     pendentes_up: [{ up2_status: "pago", up_entrega_email: false }, 2],
     erro_up:      [{ up2_status: "pago", up_gerou_musica: false, up_entrega_email: false }, 1],
@@ -153,6 +155,15 @@ function checar(rotulo, obtido, esperado) {
     await prisma.pedidoUs.count({ where: w({ link_pagina2: { not: null } }) }), 6);
   checar("paginas Premium geradas na musica 3",
     await prisma.pedidoUs.count({ where: w({ link_pagina3: { not: null } }) }), 6);
+
+  // Ninguém recebe a página Premium sem ter comprado up1 ou ds
+  const comPaginaEntregue = await prisma.pedidoUs.findMany({
+    where: w({ pagina_entrega_email: true }),
+    select: { up1_status: true, ds_status: true },
+  });
+  checar("pagina entregue sem direito (deve ser 0)",
+    comPaginaEntregue.filter((p) => p.up1_status !== "pago" && p.ds_status !== "pago").length, 0);
+  checar("paginas Premium entregues", comPaginaEntregue.length, 5);
 
   // O downsell só é ofertado depois de up1 e up2 recusados
   checar("ds ofertado apos up1/up2 pago (deve ser 0)",

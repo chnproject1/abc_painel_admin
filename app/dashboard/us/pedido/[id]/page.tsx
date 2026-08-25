@@ -32,6 +32,9 @@ interface PedidoUs {
   data_entrega?: string;
   entrega_email: boolean;
 
+  pagina_entrega_email: boolean;
+  pagina_data_entrega?: string;
+
   up_gerou_musica: boolean;
   up_erro_geracao?: boolean;
   song_id2?: string;
@@ -207,32 +210,33 @@ export default function PedidoUsPage() {
           </div>
         </section>
 
-        {/* Entregas */}
-        <section className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 flex flex-wrap gap-4 sm:gap-8">
-          <StatusIndicator label="Música 1 gerada" ativo={musicaGerada} corAtivo="text-green-600" corInativo="text-red-500" />
-          <StatusIndicator
-            label="Entrega principal" ativo={pedido.entrega_email}
-            corAtivo="text-green-600" corInativo="text-yellow-600"
-            labelAtivo="Entregue" labelInativo="Não entregue"
-          />
-          {temExtras && (
-            <>
-              <StatusIndicator label="Músicas 2 e 3 geradas" ativo={pedido.up_gerou_musica} corAtivo="text-green-600" corInativo="text-red-500" />
-              <StatusIndicator
-                label="Entrega das extras" ativo={pedido.up_entrega_email}
-                corAtivo="text-green-600" corInativo="text-yellow-600"
-                labelAtivo="Entregue" labelInativo="Não entregue"
-              />
-            </>
-          )}
-          {pedido.data_pedido && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-gray-400">Data do pedido</span>
-              <span className="text-sm font-medium text-gray-700">
-                {new Date(pedido.data_pedido).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
-              </span>
-            </div>
-          )}
+        {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não
+            enviado · verde: enviado ao cliente */}
+        <section className="bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Entregas</h2>
+          <div className="divide-y divide-gray-100">
+            <Entrega
+              label="Música 1 — venda inicial"
+              comprado={pedido.status === "pago"}
+              gerado={pedido.gerou_musica || !!pedido.link_audio}
+              entregue={pedido.entrega_email}
+              quando={pedido.data_entrega}
+            />
+            <Entrega
+              label="Página Premium — upsell 1 / downsell"
+              comprado={entregaPagina}
+              gerado={!!pedido.link_pagina}
+              entregue={pedido.pagina_entrega_email}
+              quando={pedido.pagina_data_entrega}
+            />
+            <Entrega
+              label="Músicas 2 e 3 — upsell 2 / downsell"
+              comprado={temExtras}
+              gerado={pedido.up_gerou_musica}
+              entregue={pedido.up_entrega_email}
+              quando={pedido.up_data_entrega}
+            />
+          </div>
         </section>
 
         {/* Cliente + Pedido */}
@@ -268,6 +272,9 @@ export default function PedidoUsPage() {
               </div>
               {temExtras && pedido.up_data_entrega && (
                 <Campo label="Entrega das extras" valor={new Date(pedido.up_data_entrega).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
+              )}
+              {pedido.data_pedido && (
+                <Campo label="Data do pedido" valor={new Date(pedido.data_pedido).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
               )}
               <Campo label="ID do pedido" valor={pedido.id} mono />
               <Campo label="Erro no upsell" valor={pedido.upsell_erro} />
@@ -381,6 +388,46 @@ export default function PedidoUsPage() {
 
 /* ── Sub-componentes ── */
 
+/** Uma linha de entrega, com os três estados que o pedido pode ter. */
+function Entrega({
+  label, comprado, gerado, entregue, quando,
+}: {
+  label: string;
+  comprado: boolean;
+  gerado: boolean;
+  entregue: boolean;
+  quando?: string | null;
+}) {
+  if (!comprado) {
+    return (
+      <div className="flex items-center justify-between gap-3 py-2.5">
+        <span className="text-sm text-gray-300">{label}</span>
+        <span className="text-xs text-gray-300 shrink-0">não comprado</span>
+      </div>
+    );
+  }
+
+  const estado = entregue
+    ? { cor: "text-green-600", texto: "✓ Entregue" }
+    : gerado
+    ? { cor: "text-yellow-600", texto: "● Gerado — aguardando envio" }
+    : { cor: "text-gray-500", texto: "○ Comprado — aguardando geração" };
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-sm text-gray-700">{label}</span>
+      <span className={`text-sm font-medium shrink-0 ${estado.cor}`}>
+        {estado.texto}
+        {entregue && quando && (
+          <span className="text-xs font-normal text-gray-400 ml-2">
+            {new Date(quando).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function Acao({
   titulo, descricao, rotulo, disabled, onClick, cor = "bg-avocado-600 hover:bg-avocado-700",
 }: {
@@ -419,7 +466,7 @@ function OfertaBox({
     <div className={`rounded-lg border p-3 ${cor}`}>
       <p className="text-xs font-semibold text-gray-700">{titulo}</p>
       <p className="text-[11px] text-gray-500 mb-1.5">{descricao}</p>
-      <p className="text-sm font-medium text-gray-800">{status ?? "não ofertado"}</p>
+      <p className="text-sm font-medium text-gray-800">{status ?? "não optado"}</p>
       {valor && <p className="text-xs text-gray-500 tabular-nums mt-0.5">{valor}</p>}
     </div>
   );
@@ -451,11 +498,7 @@ function Musica({
     <section className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4 gap-3">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{titulo}</h2>
-        {songId && (
-          <span className="text-[11px] text-gray-400 truncate">
-            song id (Suno): <span className="font-mono">{songId}</span>
-          </span>
-        )}
+        {songId && <span className="text-[11px] font-mono text-gray-400 truncate">{songId}</span>}
       </div>
       <div className="flex flex-wrap gap-2">
         {linkPagina && <LinkBtn href={linkPagina} label="🔗 Página Premium" />}
@@ -476,22 +519,6 @@ function Musica({
         </p>
       )}
     </section>
-  );
-}
-
-function StatusIndicator({
-  label, ativo, corAtivo, corInativo, labelAtivo = "Sim", labelInativo = "Não",
-}: {
-  label: string; ativo: boolean; corAtivo: string; corInativo: string;
-  labelAtivo?: string; labelInativo?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-gray-400">{label}</span>
-      <span className={`text-sm font-semibold flex items-center gap-1 ${ativo ? corAtivo : corInativo}`}>
-        {ativo ? "✓" : "✕"} {ativo ? labelAtivo : labelInativo}
-      </span>
-    </div>
   );
 }
 

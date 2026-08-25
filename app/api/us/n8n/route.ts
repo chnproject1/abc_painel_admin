@@ -19,7 +19,9 @@ import { prisma } from "@/lib/prisma";
 const ACOES = [
   // Fluxo 1 — venda inicial, música 1
   "music_ready", "email_entregue", "email_erro", "erro_geracao",
-  // Fluxo 2 — upsell 2, músicas 2 e 3
+  // Fluxo da página Premium (up1 / downsell)
+  "pagina_entregue", "pagina_erro",
+  // Fluxo 3 — upsell 2, músicas 2 e 3
   "up_music_ready", "up_email_entregue", "up_email_erro", "up_erro_geracao",
 ];
 
@@ -103,7 +105,22 @@ export async function POST(req: NextRequest) {
       mensagem = "Erro de geração da música 1 registrado";
       break;
 
-    /* ── Fluxo 2: upsell 2 (músicas 2 e 3) ── */
+    /* ── Fluxo da página Premium ── */
+
+    case "pagina_entregue":
+      update = {
+        pagina_entrega_email: true,
+        pagina_data_entrega: parseData(data.pagina_data_entrega ?? data.data_entrega),
+      };
+      mensagem = "Página Premium marcada como entregue";
+      break;
+
+    case "pagina_erro":
+      update = { pagina_entrega_email: false };
+      mensagem = "Entrega da página Premium marcada como erro";
+      break;
+
+    /* ── Fluxo 3: upsell 2 (músicas 2 e 3) ── */
 
     case "up_music_ready":
       // Aceita as duas músicas numa chamada só, ou uma por vez —
@@ -154,6 +171,7 @@ export async function POST(req: NextRequest) {
         id: true, plano: true, status: true,
         up1_status: true, up2_status: true, ds_status: true,
         gerou_musica: true, erro_geracao: true, entrega_email: true,
+        pagina_entrega_email: true,
         up_gerou_musica: true, up_erro_geracao: true, up_entrega_email: true,
       },
     });
