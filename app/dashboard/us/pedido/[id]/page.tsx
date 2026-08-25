@@ -76,6 +76,7 @@ export default function PedidoUsPage() {
   const temAlteracao = letra !== letraSalva || estilo !== estiloSalvo;
 
   const [toast, setToast] = useState<Toast | null>(null);
+  const [acionando, setAcionando] = useState<string | null>(null);
 
   const isAdmin = (session?.user as any)?.role === "ADMIN";
 
@@ -117,6 +118,26 @@ export default function PedidoUsPage() {
       mostrarToast("erro", "Erro ao salvar a letra.");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // Dispara os fluxos n8n da operação US
+  async function acionar(tipo: string, alvo?: string) {
+    const chave = alvo ? tipo + ":" + alvo : tipo;
+    setAcionando(chave);
+    try {
+      const res = await fetch("/api/us/trigger/" + id, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, ...(alvo ? { alvo } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao acionar");
+      mostrarToast("ok", "Fluxo acionado no n8n.");
+    } catch (e: any) {
+      mostrarToast("erro", e.message || "Erro ao acionar o fluxo.");
+    } finally {
+      setAcionando(null);
     }
   }
 
@@ -316,15 +337,81 @@ export default function PedidoUsPage() {
           </button>
         </section>
 
-        <p className="text-xs text-gray-400 text-center pb-4">
-          As ações de gerar e reenviar música ficam disponíveis quando o n8n da operação US estiver no ar.
-        </p>
+        {/* Ações — disparam os fluxos n8n da operação US */}
+        <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          <Acao
+            titulo="Gerar música principal"
+            descricao="Reenvia o pedido para produção e regera a música 1."
+            rotulo={acionando === "principal" ? "Gerando..." : "Gerar"}
+            disabled={!!acionando}
+            onClick={() => acionar("principal")}
+          />
+
+          {temExtras && (
+            <Acao
+              titulo="Gerar músicas extras"
+              descricao="Regera as músicas 2 e 3 compradas no upsell 2 ou no downsell."
+              rotulo={acionando === "upsell" ? "Gerando..." : "Gerar"}
+              disabled={!!acionando}
+              onClick={() => acionar("upsell")}
+            />
+          )}
+
+          <div className="p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Reenviar ao cliente</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Envia por e-mail o que já foi gerado, sem passar pela Suno de novo.
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={() => acionar("envio", "principal")}
+                disabled={!!acionando}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 text-sm transition-colors"
+              >
+                {acionando === "envio:principal" ? "Enviando..." : "Música 1"}
+              </button>
+              {temExtras && (
+                <button
+                  onClick={() => acionar("envio", "extras")}
+                  disabled={!!acionando}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 text-sm transition-colors"
+                >
+                  {acionando === "envio:extras" ? "Enviando..." : "Extras"}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );
 }
 
 /* ── Sub-componentes ── */
+
+function Acao({
+  titulo, descricao, rotulo, disabled, onClick,
+}: {
+  titulo: string; descricao: string; rotulo: string; disabled: boolean; onClick: () => void;
+}) {
+  return (
+    <div className="p-5 flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-gray-700">{titulo}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{descricao}</p>
+      </div>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="shrink-0 bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
+      >
+        {rotulo}
+      </button>
+    </div>
+  );
+}
 
 function OfertaBox({
   titulo, descricao, status, valor,
