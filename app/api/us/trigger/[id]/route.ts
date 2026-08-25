@@ -15,17 +15,20 @@ import { prisma } from "@/lib/prisma";
  * configurado" em vez de quebrar — mesmo comportamento do /api/trigger do BR.
  */
 
+/* Todo disparo manda `pedido_id` E `payment_id` com o mesmo valor, e o `tipo`.
+   O funil da Netlify usa `payment_id` no fluxo 1 e `pedido_id` no de upsell
+   (onde `payment_id` e o pi_ da Stripe). Mandando os dois, qualquer fluxo
+   funciona lendo o nome que preferir — e nao existe mais chamada que quebra
+   por causa do campo errado. */
 const FLUXOS = {
   // Gera a música principal (venda inicial)
   principal: {
     env: "US_N8N_WEBHOOK_URL",
-    corpo: (id: string) => ({ payment_id: id }),
+    corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "principal" }),
   },
   // Gera as duas músicas extras (upsell 2 ou downsell/combo)
   upsell: {
     env: "US_N8N_UPSELL_WEBHOOK_URL",
-    // Manda os dois nomes: o fluxo do upsell lê `pedido_id`, mas o payload
-    // que a Netlify envia também traz `payment_id`, então os dois resolvem.
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "upsell" }),
   },
   // Reenvia tudo o que já foi gerado, sem passar pela Suno

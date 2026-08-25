@@ -173,6 +173,10 @@ export default function PedidoUsPage() {
   const entregaPagina = pedido.up1_status === "pago" || pedido.ds_status === "pago";
   // O combo (downsell) entrega pagina + as duas musicas, igual ao upsell 2
   const temExtras = pedido.up2_status === "pago" || pedido.ds_status === "pago";
+  // Nenhuma oferta do funil pode ser paga sem a venda inicial ter sido paga:
+  // se isso acontece, o checkout registrou o upsell mas não a confirmação.
+  const ofertaPaga = entregaPagina || temExtras;
+  const vendaInconsistente = ofertaPaga && pedido.status !== "pago";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -214,6 +218,13 @@ export default function PedidoUsPage() {
             enviado · verde: enviado ao cliente */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Entregas</h2>
+          {vendaInconsistente && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+              <strong>Dado inconsistente:</strong> há oferta do funil paga, mas a venda inicial
+              está como <strong>{pedido.status}</strong>. O checkout registrou o upsell e não a
+              confirmação de pagamento — verifique o webhook da Stripe para este pedido.
+            </p>
+          )}
           <div className="divide-y divide-gray-100">
             <Entrega
               label="Música 1 — venda inicial"
@@ -411,7 +422,8 @@ function Entrega({
     ? { cor: "text-green-600", texto: "✓ Entregue" }
     : gerado
     ? { cor: "text-yellow-600", texto: "● Gerado — aguardando envio" }
-    : { cor: "text-gray-500", texto: "○ Comprado — aguardando geração" };
+    // Pagou e não tem nada produzido: é alarme, não espera tranquila
+    : { cor: "text-red-600", texto: "✕ Pago — nada gerado" };
 
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
