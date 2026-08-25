@@ -3,13 +3,20 @@
  *
  *   node scripts/verificar-us-teste.js
  *
- * Repete exatamente as mesmas cláusulas `where` das rotas em app/api/us/*
- * e compara com os valores esperados. Só lê o banco, nunca escreve.
+ * Repete as mesmas cláusulas `where` das rotas em app/api/us/* e compara com os
+ * valores esperados. Só lê o banco, nunca escreve.
+ *
+ * Todas as contagens são restritas aos IDs `cs_test_`, para o script continuar
+ * válido depois que pedidos reais começarem a entrar na tabela.
  */
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
+
+// Restringe tudo aos pedidos de teste
+const SO_TESTE = { id: { startsWith: "cs_test_" } };
+const w = (extra = {}) => ({ ...SO_TESTE, ...extra });
 
 let ok = 0;
 let falhou = 0;
@@ -23,27 +30,31 @@ function checar(rotulo, obtido, esperado) {
 
 (async () => {
   const url = process.env.DATABASE_URL || "";
-  console.log(`Banco: ${url.replace(/^.*@/, "").replace(/\/.*$/, "")}\n`);
+  console.log(`Banco: ${url.replace(/^.*@/, "").replace(/\/.*$/, "")}`);
+
+  const totalTabela = await prisma.pedidoUs.count();
+  const totalTeste  = await prisma.pedidoUs.count({ where: SO_TESTE });
+  console.log(`Tabela PedidoUs: ${totalTabela} registros — ${totalTeste} de teste, ${totalTabela - totalTeste} reais\n`);
 
   /* ── 1. /api/us/stats ── */
   console.log("── /api/us/stats ──");
-  checar("total",              await prisma.pedidoUs.count(), 14);
-  checar("pagos",              await prisma.pedidoUs.count({ where: { status: "pago" } }), 13);
-  checar("up1 pagos",          await prisma.pedidoUs.count({ where: { up1_status: "pago" } }), 4);
-  checar("up2 pagos",          await prisma.pedidoUs.count({ where: { up2_status: "pago" } }), 5);
-  checar("ds pagos",           await prisma.pedidoUs.count({ where: { ds_status: "pago" } }), 2);
-  checar("pendentes_envio",    await prisma.pedidoUs.count({ where: { status: "pago", entrega_email: false } }), 2);
-  checar("erro_geracao",       await prisma.pedidoUs.count({ where: { status: "pago", gerou_musica: false, entrega_email: false } }), 1);
-  checar("pendentes_envio_up", await prisma.pedidoUs.count({ where: { up2_status: "pago", up_entrega_email: false } }), 2);
-  checar("erro_geracao_up",    await prisma.pedidoUs.count({ where: { up2_status: "pago", up_gerou_musica: false, up_entrega_email: false } }), 1);
+  checar("total",              await prisma.pedidoUs.count({ where: w() }), 14);
+  checar("pagos",              await prisma.pedidoUs.count({ where: w({ status: "pago" }) }), 13);
+  checar("up1 pagos",          await prisma.pedidoUs.count({ where: w({ up1_status: "pago" }) }), 4);
+  checar("up2 pagos",          await prisma.pedidoUs.count({ where: w({ up2_status: "pago" }) }), 5);
+  checar("ds pagos",           await prisma.pedidoUs.count({ where: w({ ds_status: "pago" }) }), 2);
+  checar("pendentes_envio",    await prisma.pedidoUs.count({ where: w({ status: "pago", entrega_email: false }) }), 2);
+  checar("erro_geracao",       await prisma.pedidoUs.count({ where: w({ status: "pago", gerou_musica: false, entrega_email: false }) }), 1);
+  checar("pendentes_envio_up", await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_entrega_email: false }) }), 2);
+  checar("erro_geracao_up",    await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_gerou_musica: false, up_entrega_email: false }) }), 1);
 
   const ag = await prisma.pedidoUs.aggregate({
+    where: SO_TESTE,
     _sum: { valor: true, up1_valor: true, up2_valor: true, ds_valor: true },
   });
   const num = (v) => Number(v ?? 0);
   // Preços US: basic $14, silver $19, up1 $12, up2 $9, ds $12
-  // 8 basic pagos + 5 silver pagos = 8*14 + 5*19 = 207
-  checar("receita inicial", num(ag._sum.valor), 207);
+  checar("receita inicial", num(ag._sum.valor), 207);      // 8*14 + 5*19
   checar("receita up1",     num(ag._sum.up1_valor), 48);   // 4 x 12
   checar("receita up2",     num(ag._sum.up2_valor), 45);   // 5 x 9
   checar("receita ds",      num(ag._sum.ds_valor), 24);    // 2 x 12
@@ -62,11 +73,11 @@ function checar(rotulo, obtido, esperado) {
     up2:          [{ up2_status: "pago" }, 5],
     ds:           [{ ds_status: "pago" }, 2],
   };
-  for (const [nome, [where, esperado]] of Object.entries(FILTROS)) {
-    checar(`filtro=${nome}`, await prisma.pedidoUs.count({ where }), esperado);
+  for (const [nome, [extra, esperado]] of Object.entries(FILTROS)) {
+    checar(`filtro=${nome}`, await prisma.pedidoUs.count({ where: w(extra) }), esperado);
   }
 
-  /* ── 3. /api/us/planos — filtro por plano ── */
+  /* ── 3. filtro por plano ── */
   console.log("\n── filtro por plano ──");
   const PLANOS = {
     basic: 4, basic_up1: 1, basic_up2: 2, basic_up1_up2: 1, basic_ds: 1,
@@ -74,28 +85,27 @@ function checar(rotulo, obtido, esperado) {
   };
   let somaPlanos = 0;
   for (const [plano, esperado] of Object.entries(PLANOS)) {
-    const n = await prisma.pedidoUs.count({ where: { plano } });
+    const n = await prisma.pedidoUs.count({ where: w({ plano }) });
     somaPlanos += n;
     checar(`plano=${plano}`, n, esperado);
   }
-  checar("soma dos planos cobre a tabela", somaPlanos, 14);
+  checar("soma dos planos cobre os de teste", somaPlanos, 14);
 
-  /* ── 4. Regras do funil que definimos ── */
+  /* ── 4. Regras do funil ── */
   console.log("\n── invariantes do funil ──");
 
   // A automação gera a página Premium de TODA música gerada, independente de up1/ds.
   // up1 e ds decidem apenas se o link é entregue ao cliente no envio final.
   checar("musica gerada sem link_pagina (deve ser 0)",
-    await prisma.pedidoUs.count({ where: { gerou_musica: true, link_pagina: null } }), 0);
+    await prisma.pedidoUs.count({ where: w({ gerou_musica: true, link_pagina: null }) }), 0);
 
   checar("paginas Premium geradas",
-    await prisma.pedidoUs.count({ where: { link_pagina: { not: null } } }), 12);
+    await prisma.pedidoUs.count({ where: w({ link_pagina: { not: null } }) }), 12);
 
   // O direito à entrega é avaliado em JS, igual ao que a tela de detalhe faz.
-  // Em SQL, `NOT (a = 'pago' OR b = 'pago')` descarta linhas onde b é NULL
-  // (lógica de três valores), então contar pelo banco daria resultado errado.
+  // Em SQL, `NOT (a = 'pago' OR b = 'pago')` descarta linhas onde b é NULL.
   const comPagina = await prisma.pedidoUs.findMany({
-    where: { link_pagina: { not: null } },
+    where: w({ link_pagina: { not: null } }),
     select: { up1_status: true, ds_status: true },
   });
   const entregues = comPagina.filter(
@@ -106,64 +116,49 @@ function checar(rotulo, obtido, esperado) {
   checar("dessas, geradas mas NAO entregues", comPagina.length - entregues, 6);
 
   // Os slots 2 e 3 só existem quando o upsell 2 foi pago
-  const extrasSemUp2 = await prisma.pedidoUs.count({
-    where: { song_id2: { not: null }, NOT: { up2_status: "pago" } },
-  });
-  checar("song_id2 sem up2 pago (deve ser 0)", extrasSemUp2, 0);
-
-  const slot3SemSlot2 = await prisma.pedidoUs.count({
-    where: { song_id3: { not: null }, song_id2: null },
-  });
-  checar("song_id3 sem song_id2 (deve ser 0)", slot3SemSlot2, 0);
-
+  checar("song_id2 sem up2 pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ song_id2: { not: null }, NOT: { up2_status: "pago" } }) }), 0);
+  checar("song_id3 sem song_id2 (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ song_id3: { not: null }, song_id2: null }) }), 0);
   checar("pedidos com as 3 musicas geradas",
-    await prisma.pedidoUs.count({ where: { song_id: { not: null }, song_id2: { not: null }, song_id3: { not: null } } }), 4);
+    await prisma.pedidoUs.count({ where: w({ song_id: { not: null }, song_id2: { not: null }, song_id3: { not: null } }) }), 4);
 
   // As músicas extras também têm a página gerada sempre
   checar("musica 2 gerada sem link_pagina2 (deve ser 0)",
-    await prisma.pedidoUs.count({ where: { song_id2: { not: null }, link_pagina2: null } }), 0);
+    await prisma.pedidoUs.count({ where: w({ song_id2: { not: null }, link_pagina2: null }) }), 0);
   checar("musica 3 gerada sem link_pagina3 (deve ser 0)",
-    await prisma.pedidoUs.count({ where: { song_id3: { not: null }, link_pagina3: null } }), 0);
+    await prisma.pedidoUs.count({ where: w({ song_id3: { not: null }, link_pagina3: null }) }), 0);
   checar("paginas Premium geradas na musica 2",
-    await prisma.pedidoUs.count({ where: { link_pagina2: { not: null } } }), 4);
+    await prisma.pedidoUs.count({ where: w({ link_pagina2: { not: null } }) }), 4);
   checar("paginas Premium geradas na musica 3",
-    await prisma.pedidoUs.count({ where: { link_pagina3: { not: null } } }), 4);
+    await prisma.pedidoUs.count({ where: w({ link_pagina3: { not: null } }) }), 4);
 
   // O downsell só é ofertado depois de up1 e up2 recusados
-  const dsIndevido = await prisma.pedidoUs.count({
-    where: { ds_status: { not: null }, OR: [{ up1_status: "pago" }, { up2_status: "pago" }] },
-  });
-  checar("ds ofertado apos up1/up2 pago (deve ser 0)", dsIndevido, 0);
+  checar("ds ofertado apos up1/up2 pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ ds_status: { not: null }, OR: [{ up1_status: "pago" }, { up2_status: "pago" }] }) }), 0);
 
   // O plano tem que refletir os status das ofertas
-  const planoUp1Errado = await prisma.pedidoUs.count({
-    where: { plano: { contains: "up1" }, NOT: { up1_status: "pago" } },
-  });
-  checar("plano com up1 mas up1 nao pago (deve ser 0)", planoUp1Errado, 0);
-
-  const planoUp2Errado = await prisma.pedidoUs.count({
-    where: { plano: { contains: "up2" }, NOT: { up2_status: "pago" } },
-  });
-  checar("plano com up2 mas up2 nao pago (deve ser 0)", planoUp2Errado, 0);
-
-  const planoDsErrado = await prisma.pedidoUs.count({
-    where: { plano: { endsWith: "_ds" }, NOT: { ds_status: "pago" } },
-  });
-  checar("plano com ds mas ds nao pago (deve ser 0)", planoDsErrado, 0);
+  checar("plano com up1 mas up1 nao pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ plano: { contains: "up1" }, NOT: { up1_status: "pago" } }) }), 0);
+  checar("plano com up2 mas up2 nao pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ plano: { contains: "up2" }, NOT: { up2_status: "pago" } }) }), 0);
+  checar("plano com ds mas ds nao pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({ plano: { endsWith: "_ds" }, NOT: { ds_status: "pago" } }) }), 0);
 
   /* ── 5. /api/us/search ── */
   console.log("\n── /api/us/search ──");
-  checar("busca por email exato",
-    (await prisma.pedidoUs.findMany({ where: { OR: [{ email: { contains: "james-whitaker@example.com", mode: "insensitive" } }, { id: { contains: "james-whitaker@example.com", mode: "insensitive" } }] } })).length, 1);
-  checar("busca por prefixo de id",
-    (await prisma.pedidoUs.findMany({ where: { OR: [{ email: { contains: "cs_test_", mode: "insensitive" } }, { id: { contains: "cs_test_", mode: "insensitive" } }] }, take: 50 })).length, 14);
-  checar("busca sem resultado",
-    (await prisma.pedidoUs.findMany({ where: { OR: [{ email: { contains: "naoexiste@x.com", mode: "insensitive" } }, { id: { contains: "naoexiste@x.com", mode: "insensitive" } }] } })).length, 0);
+  const busca = async (q) => (await prisma.pedidoUs.findMany({
+    where: w({ OR: [{ email: { contains: q, mode: "insensitive" } }, { id: { contains: q, mode: "insensitive" } }] }),
+    take: 50,
+  })).length;
+  checar("busca por email exato",   await busca("james-whitaker@example.com"), 1);
+  checar("busca por prefixo de id", await busca("cs_test_"), 14);
+  checar("busca sem resultado",     await busca("naoexiste@x.com"), 0);
 
   /* ── 6. Paginação (LIMIT 50 das rotas) ── */
   console.log("\n── paginacao ──");
-  checar("pagina 1 traz os 14", (await prisma.pedidoUs.findMany({ skip: 0, take: 50 })).length, 14);
-  checar("pagina 2 vazia",      (await prisma.pedidoUs.findMany({ skip: 50, take: 50 })).length, 0);
+  checar("pagina 1 traz os 14", (await prisma.pedidoUs.findMany({ where: w(), skip: 0, take: 50 })).length, 14);
+  checar("pagina 2 vazia",      (await prisma.pedidoUs.findMany({ where: w(), skip: 50, take: 50 })).length, 0);
 
   /* ── 7. Isolamento entre as operações ── */
   console.log("\n── isolamento BR / US ──");

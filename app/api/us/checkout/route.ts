@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
       up2_status: p.up2_status,
       ds_status:  p.ds_status,
       plano:      p.plano,
+      plan:       p.plano,   // apelido compatível com o /api/checkout do BR
       name:       p.nome,
       mail:       p.email,
       nomefiscal: p.nomefiscal,
