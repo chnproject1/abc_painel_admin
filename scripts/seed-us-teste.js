@@ -48,7 +48,8 @@ function montar({
   const dataPedido = new Date(agora - diasAtras * 24 * 60 * 60 * 1000);
   const tier = plano.startsWith("silver") ? "silver" : "basic";
 
-  const temExtras = up2 === "pago";
+  // O combo (downsell) entrega pagina + as duas musicas, igual ao upsell 2
+  const temExtras = up2 === "pago" || ds === "pago";
   const pagou = status === "pago";
 
   // A automação gera a página Premium de toda música, independente de o cliente

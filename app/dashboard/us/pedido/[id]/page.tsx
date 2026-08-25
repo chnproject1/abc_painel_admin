@@ -143,7 +143,8 @@ export default function PedidoUsPage() {
   // As páginas Premium são sempre geradas pela automação. O upsell 1 e o downsell
   // decidem apenas se o link é entregue ao cliente no envio final.
   const entregaPagina = pedido.up1_status === "pago" || pedido.ds_status === "pago";
-  const temExtras = pedido.up2_status === "pago";
+  // O combo (downsell) entrega pagina + as duas musicas, igual ao upsell 2
+  const temExtras = pedido.up2_status === "pago" || pedido.ds_status === "pago";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -177,7 +178,7 @@ export default function PedidoUsPage() {
             <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)} />
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} />
             <OfertaBox titulo="Upsell 2"      descricao="Músicas 2 e 3"   status={pedido.up2_status} valor={usd(pedido.up2_valor)} />
-            <OfertaBox titulo="Downsell"      descricao="Página Premium"  status={pedido.ds_status}  valor={usd(pedido.ds_valor)} />
+            <OfertaBox titulo="Downsell"      descricao="Página + músicas" status={pedido.ds_status}  valor={usd(pedido.ds_valor)} />
           </div>
         </section>
 

@@ -52,7 +52,7 @@ const FILTRO_LABEL: Record<string, string> = {
   erro:         "Erro de geração (música 1)",
   up1:          "Compraram o upsell 1",
   up2:          "Compraram o upsell 2",
-  ds:           "Compraram o downsell",
+  ds:           "Compraram o downsell (página + músicas)",
   pendentes_up: "Músicas extras pendentes",
   erro_up:      "Erro de geração (músicas extras)",
 };
@@ -92,7 +92,8 @@ function PedidoCard({ p }: { p: PedidoUs }) {
   const gerada        = p.gerou_musica || !!p.link_audio || !!p.link_pagina;
   const alertaPago    = p.status === "pago" && !gerada;
   const naoEntregue   = gerada && !p.entrega_email;
-  const extrasAbertas = p.up2_status === "pago" && !p.up_entrega_email;
+  const temExtras     = p.up2_status === "pago" || p.ds_status === "pago";
+  const extrasAbertas = temExtras && !p.up_entrega_email;
 
   const cardClass = alertaPago
     ? "bg-red-50 border-red-200 hover:border-red-400"
@@ -123,14 +124,14 @@ function PedidoCard({ p }: { p: PedidoUs }) {
           </div>
           {alertaPago    && <p className="text-xs text-red-500 font-medium mt-1">Pago — música não gerada</p>}
           {naoEntregue   && <p className="text-xs text-yellow-600 font-medium mt-1">Música gerada — aguardando entrega</p>}
-          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">Upsell 2 pago — músicas extras não entregues</p>}
+          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">Músicas extras compradas — ainda não entregues</p>}
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_COR[p.status] ?? "bg-gray-100 text-gray-600"}`}>
             {p.status}
           </span>
           {p.entrega_email && <span className="text-xs text-avocado-600 font-medium">✓ Entregue</span>}
-          {p.up2_status === "pago" && p.up_entrega_email && (
+          {temExtras && p.up_entrega_email && (
             <span className="text-xs text-avocado-600 font-medium">✓ Extras entregues</span>
           )}
         </div>

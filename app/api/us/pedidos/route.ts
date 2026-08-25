@@ -35,12 +35,12 @@ export async function GET(req: NextRequest) {
       break;
     // Upsell 2 comprado e ainda não entregue
     case "pendentes_up":
-      where.up2_status = "pago";
+      where.OR = [{ up2_status: "pago" }, { ds_status: "pago" }];
       where.up_entrega_email = false;
       break;
     // Upsell 2 comprado e músicas extras não geradas
     case "erro_up":
-      where.up2_status = "pago";
+      where.OR = [{ up2_status: "pago" }, { ds_status: "pago" }];
       where.up_gerou_musica = false;
       where.up_entrega_email = false;
       break;

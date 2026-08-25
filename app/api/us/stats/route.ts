@@ -41,11 +41,17 @@ export async function GET() {
     }),
 
     // Entrega do upsell 2: comprou as músicas extras e ainda não recebeu
-    prisma.pedidoUs.count({ where: { up2_status: "pago", up_entrega_email: false } }),
+    prisma.pedidoUs.count({
+      where: { OR: [{ up2_status: "pago" }, { ds_status: "pago" }], up_entrega_email: false },
+    }),
 
     // Entrega do upsell 2: comprou, músicas não geradas e ainda não entregues
     prisma.pedidoUs.count({
-      where: { up2_status: "pago", up_gerou_musica: false, up_entrega_email: false },
+      where: {
+        OR: [{ up2_status: "pago" }, { ds_status: "pago" }],
+        up_gerou_musica: false,
+        up_entrega_email: false,
+      },
     }),
 
     // Faturamento somado das quatro ofertas

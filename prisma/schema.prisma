@@ -71,8 +71,11 @@ model PedidoUs {
 
   nome          String
   email         String
-  nomefiscal    String?                        // nome de cobrança (Stripe)
+  nomefiscal    String?                        // nome fiscal informado no funil
+  comprador     String?                        // nome impresso no cartão (Stripe)
   zip_code      String?                        // CEP de cobrança (Stripe / AVS)
+  pais          String?   @default("US")
+  stripe_session String?                       // cs_... — muda quando o cliente troca de plano
   plano         String    @default("")         // basic | basic_up1 | basic_up2 | basic_up1_up2 | basic_ds (idem silver)
   idioma        String    @default("en")
 
@@ -113,6 +116,16 @@ model PedidoUs {
   up_entrega_email  Boolean @default(false)
   up_tentativa_geracao Int  @default(0)
   up_tentativa_envio   Int  @default(0)
+
+  // Registro bruto vindo do funil (Netlify). O painel deriva daqui os
+  // up1_status / up2_status / ds_status e os valores por oferta.
+  // Mapeamento: pagina = up1, versoes = up2, combo = ds (entrega as duas).
+  upsell            String?                    // 'pagina' | 'versoes' | 'pagina,versoes'
+  upsell_status     String?                    // pago | recusado
+  upsell_amount     String?                    // '12.00' ou '12.00,9.00'
+  upsell_payment_id String?                    // 'pi_...' ou 'pi_...,pi_...'
+  upsell_erro       String?
+  upsell_n8n        String?
 
   // Recuperação de carrinho
   funil         String?

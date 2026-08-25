@@ -19,12 +19,105 @@ import { prisma } from "@/lib/prisma";
 const TIERS = ["basic", "silver"];
 
 const ACOES = [
+  "update",
   "pago",
   "up1_pago", "up1_recusado",
   "up2_pago", "up2_recusado",
   "ds_pago",  "ds_recusado",
   "finalizar",
 ];
+
+/**
+ * Nomes que o funil (Netlify) manda -> colunas do model PedidoUs.
+ * Ver CONTRATO-PAINEL.md do repositório do funil.
+ * `phone`, `cpf` e `currency` chegam mas são ignorados: os EUA não coletam
+ * telefone nem documento, e a moeda é sempre USD nesta tabela.
+ */
+const MAPA_FUNIL: Record<string, string> = {
+  name: "nome",       nome: "nome",
+  email: "email",     mail: "email",
+  plan: "plano",      plano: "plano",
+  status: "status",
+  estilo: "estilo",   letra: "letra",   idioma: "idioma",
+  nomefiscal: "nomefiscal",
+  comprador: "comprador",
+  zip: "zip_code",    zip_code: "zip_code",
+  pais: "pais",
+  stripe_session: "stripe_session",
+  utm_source: "utm_source",     utm_campaign: "utm_campaign",
+  utm_medium: "utm_medium",     utm_content: "utm_content",
+  utm_term: "utm_term",         utm_id: "utm_id",
+  fbclid: "fbclid",   ttclid: "ttclid",   pixel_id: "pixel_id",
+  ip: "ip",           funil: "funil",     recovery_id: "recovery_id",
+  upsell: "upsell",
+  upsell_status: "upsell_status",
+  upsell_amount: "upsell_amount",
+  upsell_payment_id: "upsell_payment_id",
+  upsell_erro: "upsell_erro",
+  upsell_n8n: "upsell_n8n",
+};
+
+const lista = (v: unknown): string[] =>
+  String(v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Traduz o registro bruto do funil para os status e valores por oferta que o
+ * portal usa. Mapeamento definido no funil: pagina = up1, versoes = up2,
+ * combo = ds — e o combo entrega as duas coisas.
+ *
+ * O plano composto vem pronto do funil; o sufixo `_ds` é o que identifica
+ * que a compra foi o combo, já que `upsell` lista os dois entregáveis nos
+ * dois casos.
+ */
+function derivarOfertas(linha: {
+  plano?: string | null;
+  upsell?: string | null;
+  upsell_status?: string | null;
+  upsell_amount?: string | null;
+  upsell_erro?: string | null;
+}) {
+  const out: Record<string, unknown> = {};
+  const plano = linha.plano ?? "";
+
+  if (linha.upsell_status === "recusado") {
+    // O produto recusado vem no início do upsell_erro, no formato "produto:codigo"
+    const produto = String(linha.upsell_erro ?? "").split(":")[0].replace("-teste", "");
+    if (produto === "pagina")  out.up1_status = "recusado";
+    if (produto === "versoes") out.up2_status = "recusado";
+    if (produto === "combo")   out.ds_status  = "recusado";
+    return out;
+  }
+
+  if (linha.upsell_status !== "pago") return out;
+
+  const entregues = lista(linha.upsell);
+  const valores   = lista(linha.upsell_amount);
+  const soma = (arr: string[]) => arr.reduce((t, v) => t + (parseFloat(v) || 0), 0);
+
+  // Combo (downsell): uma cobrança só, entregando página + as duas músicas
+  if (/_ds$/.test(plano)) {
+    out.ds_status = "pago";
+    const total = soma(valores);
+    if (total > 0) out.ds_valor = total;
+    return out;
+  }
+
+  // Fora do combo, cada compra acrescenta um entregável — os dois índices
+  // andam juntos, então dá para casar entregável com valor.
+  entregues.forEach((produto, i) => {
+    const v = parseFloat(valores[i] ?? "");
+    if (produto === "pagina") {
+      out.up1_status = "pago";
+      if (Number.isFinite(v)) out.up1_valor = v;
+    }
+    if (produto === "versoes") {
+      out.up2_status = "pago";
+      if (Number.isFinite(v)) out.up2_valor = v;
+    }
+  });
+
+  return out;
+}
 
 function ok(data: object) {
   return NextResponse.json({ success: true, ...data });
@@ -106,15 +199,36 @@ export async function GET(req: NextRequest) {
       up1_status: p.up1_status,
       up2_status: p.up2_status,
       ds_status:  p.ds_status,
+      // Devolvido com os MESMOS nomes usados na escrita, e também com os
+      // nomes das colunas — o funil lê `plan`/`email`/`zip`, o n8n lê os dois.
       plano:      p.plano,
-      plan:       p.plano,   // apelido compatível com o /api/checkout do BR
+      plan:       p.plano,
+      nome:       p.nome,
       name:       p.nome,
+      email:      p.email,
       mail:       p.email,
-      nomefiscal: p.nomefiscal,
+      valor:      p.valor,
+      amount:     p.valor,
       zip_code:   p.zip_code,
+      zip:        p.zip_code,
+      nomefiscal: p.nomefiscal,
+      comprador:  p.comprador,
+      pais:       p.pais,
+      stripe_session: p.stripe_session,
       idioma:     p.idioma,
       estilo:     p.estilo,
       letra:      p.letra,
+
+      // Registro bruto do funil
+      upsell:            p.upsell,
+      upsell_status:     p.upsell_status,
+      upsell_amount:     p.upsell_amount,
+      upsell_payment_id: p.upsell_payment_id,
+      upsell_erro:       p.upsell_erro,
+      upsell_n8n:        p.upsell_n8n,
+      up1_valor:  p.up1_valor,
+      up2_valor:  p.up2_valor,
+      ds_valor:   p.ds_valor,
 
       // Sinais de controle para a automação
       entrega_pagina,
@@ -229,10 +343,69 @@ export async function POST(req: NextRequest) {
     select: {
       plano: true, status: true,
       up1_status: true, up2_status: true, ds_status: true,
+      upsell: true, upsell_status: true, upsell_amount: true, upsell_erro: true,
     },
   });
 
   if (!atual) return erro("Pedido não encontrado", 404);
+
+  /* ── update: merge genérico dos campos que o funil mandar ──
+     Regra do contrato: mescla no registro só as colunas presentes no corpo e
+     deixa as outras intactas. Nunca insere — se o id não existe, o 404 acima
+     já respondeu. */
+  if (data.action === "update") {
+    const merge: any = {};
+    const ignorados: string[] = [];
+
+    for (const [chave, valor] of Object.entries(data)) {
+      if (chave === "action" || chave === "id") continue;
+      if (valor === undefined || valor === null || valor === "") continue;
+
+      // amount vira Decimal na coluna valor
+      if (chave === "amount") {
+        const n = valorNumerico(valor);
+        if (n !== undefined) merge.valor = n;
+        continue;
+      }
+      // O funil manda estes por compatibilidade com o BR, mas os EUA não usam
+      if (chave === "phone" || chave === "cpf" || chave === "currency") continue;
+
+      const coluna = MAPA_FUNIL[chave];
+      if (coluna) merge[coluna] = String(valor);
+      else ignorados.push(chave);
+    }
+
+    if (Object.keys(merge).length === 0) {
+      return erro("Nenhum campo conhecido para atualizar", 400);
+    }
+
+    // Deriva os status e valores por oferta a partir do estado já mesclado
+    Object.assign(merge, derivarOfertas({
+      plano:         merge.plano         ?? atual.plano,
+      upsell:        merge.upsell        ?? atual.upsell,
+      upsell_status: merge.upsell_status ?? atual.upsell_status,
+      upsell_amount: merge.upsell_amount ?? atual.upsell_amount,
+      upsell_erro:   merge.upsell_erro   ?? atual.upsell_erro,
+    }));
+
+    const pedido = await prisma.pedidoUs.update({
+      where: { id: data.id },
+      data: merge,
+      select: {
+        id: true, plano: true, status: true,
+        up1_status: true, up2_status: true, ds_status: true,
+        valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
+      },
+    });
+
+    return ok({
+      message: `${Object.keys(merge).length} campo(s) atualizado(s)`,
+      pedido,
+      entrega_pagina: pedido.up1_status === "pago" || pedido.ds_status === "pago",
+      ...(ignorados.length ? { ignorados } : {}),
+      aviso,
+    });
+  }
 
   const tier = tierDe(atual.plano);
   let { up1_status, up2_status, ds_status } = atual;

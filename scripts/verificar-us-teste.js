@@ -116,12 +116,15 @@ function checar(rotulo, obtido, esperado) {
   checar("dessas, geradas mas NAO entregues", comPagina.length - entregues, 6);
 
   // Os slots 2 e 3 só existem quando o upsell 2 foi pago
-  checar("song_id2 sem up2 pago (deve ser 0)",
-    await prisma.pedidoUs.count({ where: w({ song_id2: { not: null }, NOT: { up2_status: "pago" } }) }), 0);
+  checar("song_id2 sem up2 nem ds pago (deve ser 0)",
+    await prisma.pedidoUs.count({ where: w({
+      song_id2: { not: null },
+      NOT: { OR: [{ up2_status: "pago" }, { ds_status: "pago" }] },
+    }) }), 0);
   checar("song_id3 sem song_id2 (deve ser 0)",
     await prisma.pedidoUs.count({ where: w({ song_id3: { not: null }, song_id2: null }) }), 0);
   checar("pedidos com as 3 musicas geradas",
-    await prisma.pedidoUs.count({ where: w({ song_id: { not: null }, song_id2: { not: null }, song_id3: { not: null } }) }), 4);
+    await prisma.pedidoUs.count({ where: w({ song_id: { not: null }, song_id2: { not: null }, song_id3: { not: null } }) }), 6);
 
   // As músicas extras também têm a página gerada sempre
   checar("musica 2 gerada sem link_pagina2 (deve ser 0)",
@@ -129,9 +132,9 @@ function checar(rotulo, obtido, esperado) {
   checar("musica 3 gerada sem link_pagina3 (deve ser 0)",
     await prisma.pedidoUs.count({ where: w({ song_id3: { not: null }, link_pagina3: null }) }), 0);
   checar("paginas Premium geradas na musica 2",
-    await prisma.pedidoUs.count({ where: w({ link_pagina2: { not: null } }) }), 4);
+    await prisma.pedidoUs.count({ where: w({ link_pagina2: { not: null } }) }), 6);
   checar("paginas Premium geradas na musica 3",
-    await prisma.pedidoUs.count({ where: w({ link_pagina3: { not: null } }) }), 4);
+    await prisma.pedidoUs.count({ where: w({ link_pagina3: { not: null } }) }), 6);
 
   // O downsell só é ofertado depois de up1 e up2 recusados
   checar("ds ofertado apos up1/up2 pago (deve ser 0)",
