@@ -48,8 +48,8 @@ const STATUS_COR: Record<string, string> = {
 const FILTRO_LABEL: Record<string, string> = {
   todos:        "Todos os pedidos",
   pagos:        "Compraram",
-  pendentes:    "Entrega principal pendente",
-  erro:         "Erro de geração (música 1)",
+  pendentes:    "Pendentes envio",
+  erro:         "Erro de geração",
   up1:          "Compraram o upsell 1",
   up2:          "Compraram o upsell 2",
   ds:           "Compraram o downsell (página + músicas)",
@@ -301,29 +301,12 @@ function DashboardUsContent() {
         {isAdmin && stats && (
           <div className="mb-6 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Venda inicial</h2>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard label="Total"            value={stats.total}           cor="bg-white border-gray-200 text-gray-800"         ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
-                <StatCard label="Pagas"            value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"     ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
-                <StatCard label="Entrega pendente" value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800"  ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
-                <StatCard label="Erro de geração"  value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"           ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Funil de ofertas</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-                <StatCard label="Upsell 1 · página"  value={stats.up1} cor="bg-avocado-50 border-avocado-200 text-avocado-800" ativo={filtroAtivo === "up1"} onClick={() => handleCardClick("up1")} />
-                <StatCard label="Upsell 2 · músicas" value={stats.up2} cor="bg-avocado-50 border-avocado-200 text-avocado-800" ativo={filtroAtivo === "up2"} onClick={() => handleCardClick("up2")} />
-                <StatCard label="Downsell"           value={stats.ds}  cor="bg-blue-50 border-blue-200 text-blue-800"          ativo={filtroAtivo === "ds"}  onClick={() => handleCardClick("ds")} />
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Músicas extras (upsell 2)</h2>
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <StatCard label="Entrega pendente" value={stats.pendentes_envio_up} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "pendentes_up"} onClick={() => handleCardClick("pendentes_up")} />
-                <StatCard label="Erro de geração"  value={stats.erro_geracao_up}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "erro_up"}      onClick={() => handleCardClick("erro_up")} />
+                <StatCard label="Total"            value={stats.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
+                <StatCard label="Pagas"            value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
+                <StatCard label="Pendentes envio"  value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
+                <StatCard label="Erro de geração"  value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
               </div>
             </div>
 
@@ -350,7 +333,7 @@ function DashboardUsContent() {
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Email do cliente ou ID do Stripe"
+              placeholder="Email do cliente ou ID do pedido"
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-avocado-500"
             />
             <button

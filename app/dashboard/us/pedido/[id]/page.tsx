@@ -8,7 +8,11 @@ interface PedidoUs {
   nome: string;
   email: string;
   nomefiscal?: string;
+  comprador?: string;
   zip_code?: string;
+  pais?: string;
+  upsell_payment_id?: string;
+  upsell_erro?: string;
   plano: string;
   idioma?: string;
   status: string;
@@ -240,8 +244,10 @@ export default function PedidoUsPage() {
               <Campo label="E-mail" valor={pedido.email?.split("?")[0]} />
               {isAdmin && (
                 <div className="grid grid-cols-2 gap-3">
-                  <Campo label="Nome de cobrança" valor={pedido.nomefiscal} />
+                  <Campo label="Nome fiscal" valor={pedido.nomefiscal} />
+                  <Campo label="Nome no cartão" valor={pedido.comprador} />
                   <Campo label="ZIP code" valor={pedido.zip_code} />
+                  <Campo label="País" valor={pedido.pais} />
                 </div>
               )}
             </div>
@@ -263,7 +269,8 @@ export default function PedidoUsPage() {
               {temExtras && pedido.up_data_entrega && (
                 <Campo label="Entrega das extras" valor={new Date(pedido.up_data_entrega).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
               )}
-              <Campo label="ID Stripe" valor={pedido.id} mono />
+              <Campo label="ID do pedido" valor={pedido.id} mono />
+              <Campo label="Erro no upsell" valor={pedido.upsell_erro} />
             </div>
           </section>
         </div>
@@ -444,7 +451,11 @@ function Musica({
     <section className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4 gap-3">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{titulo}</h2>
-        {songId && <span className="text-[11px] font-mono text-gray-400 truncate">{songId}</span>}
+        {songId && (
+          <span className="text-[11px] text-gray-400 truncate">
+            song id (Suno): <span className="font-mono">{songId}</span>
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
         {linkPagina && <LinkBtn href={linkPagina} label="🔗 Página Premium" />}
@@ -459,16 +470,10 @@ function Musica({
         )}
         {linkMp4 && <LinkBtn href={linkMp4} label="🎬 MP4" />}
       </div>
-      {linkPagina && (
-        entregaPagina ? (
-          <p className="text-xs text-avocado-700 mt-3">
-            ✓ Página Premium entregue ao cliente — comprou o upsell 1 ou o downsell.
-          </p>
-        ) : (
-          <p className="text-xs text-yellow-700 mt-3">
-            Página Premium gerada, mas <strong>não entregue</strong> ao cliente — sem upsell 1 nem downsell. O cliente recebeu só o link da música.
-          </p>
-        )
+      {linkPagina && !entregaPagina && (
+        <p className="text-xs text-yellow-700 mt-3">
+          Página Premium gerada, mas o cliente <strong>não tem direito</strong> a ela — sem upsell 1 nem downsell.
+        </p>
       )}
     </section>
   );

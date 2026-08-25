@@ -22,16 +22,21 @@ export async function GET(req: NextRequest) {
     case "pagos":
       where.status = "pago";
       break;
-    // Entrega principal pendente
+    // Falta alguma entrega — principal ou extras
     case "pendentes":
       where.status = "pago";
-      where.entrega_email = false;
+      where.OR = [
+        { entrega_email: false },
+        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }] },
+      ];
       break;
-    // Entrega principal: música não gerada
+    // Alguma geração falhou — principal ou extras
     case "erro":
       where.status = "pago";
-      where.gerou_musica = false;
-      where.entrega_email = false;
+      where.OR = [
+        { gerou_musica: false, entrega_email: false },
+        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_gerou_musica: false, up_entrega_email: false }] },
+      ];
       break;
     // Upsell 2 comprado e ainda não entregue
     case "pendentes_up":

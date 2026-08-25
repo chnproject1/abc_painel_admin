@@ -18,6 +18,24 @@ const prisma = new PrismaClient();
 const SO_TESTE = { id: { startsWith: "cs_test_" } };
 const w = (extra = {}) => ({ ...SO_TESTE, ...extra });
 
+// Mesmas cláusulas consolidadas de /api/us/stats e /api/us/pedidos:
+// pendente ou erro em QUALQUER entrega — principal ou extras.
+const TEM_EXTRAS = { OR: [{ up2_status: "pago" }, { ds_status: "pago" }] };
+const PENDENTE = {
+  status: "pago",
+  OR: [
+    { entrega_email: false },
+    { AND: [TEM_EXTRAS, { up_entrega_email: false }] },
+  ],
+};
+const ERRO = {
+  status: "pago",
+  OR: [
+    { gerou_musica: false, entrega_email: false },
+    { AND: [TEM_EXTRAS, { up_gerou_musica: false, up_entrega_email: false }] },
+  ],
+};
+
 let ok = 0;
 let falhou = 0;
 
@@ -43,8 +61,8 @@ function checar(rotulo, obtido, esperado) {
   checar("up1 pagos",          await prisma.pedidoUs.count({ where: w({ up1_status: "pago" }) }), 4);
   checar("up2 pagos",          await prisma.pedidoUs.count({ where: w({ up2_status: "pago" }) }), 5);
   checar("ds pagos",           await prisma.pedidoUs.count({ where: w({ ds_status: "pago" }) }), 2);
-  checar("pendentes_envio",    await prisma.pedidoUs.count({ where: w({ status: "pago", entrega_email: false }) }), 2);
-  checar("erro_geracao",       await prisma.pedidoUs.count({ where: w({ status: "pago", gerou_musica: false, entrega_email: false }) }), 1);
+  checar("pendentes_envio (todas as entregas)", await prisma.pedidoUs.count({ where: w(PENDENTE) }), 4);
+  checar("erro_geracao (todas as entregas)",    await prisma.pedidoUs.count({ where: w(ERRO) }), 2);
   checar("pendentes_envio_up", await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_entrega_email: false }) }), 2);
   checar("erro_geracao_up",    await prisma.pedidoUs.count({ where: w({ up2_status: "pago", up_gerou_musica: false, up_entrega_email: false }) }), 1);
 
@@ -65,8 +83,8 @@ function checar(rotulo, obtido, esperado) {
   const FILTROS = {
     todos:        [{}, 14],
     pagos:        [{ status: "pago" }, 13],
-    pendentes:    [{ status: "pago", entrega_email: false }, 2],
-    erro:         [{ status: "pago", gerou_musica: false, entrega_email: false }, 1],
+    pendentes:    [PENDENTE, 4],
+    erro:         [ERRO, 2],
     pendentes_up: [{ up2_status: "pago", up_entrega_email: false }, 2],
     erro_up:      [{ up2_status: "pago", up_gerou_musica: false, up_entrega_email: false }, 1],
     up1:          [{ up1_status: "pago" }, 4],

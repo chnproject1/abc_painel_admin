@@ -111,7 +111,16 @@ export const CAMPOS_US_OPERADOR = [
 // Campos extras visíveis apenas para ADMIN
 export const CAMPOS_US_ADMIN_EXTRAS = [
   "nomefiscal",
+  "comprador",
   "zip_code",
+  "pais",
+  // Registro bruto do funil — o painel deriva up1/up2/ds destes
+  "upsell",
+  "upsell_status",
+  "upsell_amount",
+  "upsell_payment_id",
+  "upsell_erro",
+  "upsell_n8n",
   "data_pedido",
   "valor",
   "up1_valor",

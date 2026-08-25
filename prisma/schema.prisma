@@ -75,7 +75,6 @@ model PedidoUs {
   comprador     String?                        // nome impresso no cartão (Stripe)
   zip_code      String?                        // CEP de cobrança (Stripe / AVS)
   pais          String?   @default("US")
-  stripe_session String?                       // cs_... — muda quando o cliente troca de plano
   plano         String    @default("")         // basic | basic_up1 | basic_up2 | basic_up1_up2 | basic_ds (idem silver)
   idioma        String    @default("en")
 
