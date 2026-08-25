@@ -28,10 +28,10 @@ const FLUXOS = {
     // que a Netlify envia também traz `payment_id`, então os dois resolvem.
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "upsell" }),
   },
-  // Só reenvia o que já foi gerado, sem passar pela Suno
+  // Reenvia tudo o que já foi gerado, sem passar pela Suno
   envio: {
     env: "US_N8N_ENVIO_WEBHOOK_URL",
-    corpo: (id: string, alvo: string) => ({ payment_id: id, pedido_id: id, tipo: "envio", alvo }),
+    corpo: (id: string) => ({ payment_id: id, pedido_id: id, tipo: "envio" }),
   },
 } as const;
 
@@ -87,11 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  const alvo = body?.alvo === "extras" ? "extras" : "principal";
-  const corpo =
-    tipo === "envio"
-      ? FLUXOS.envio.corpo(pedido.id, alvo)
-      : (fluxo.corpo as (id: string) => object)(pedido.id);
+  const corpo = fluxo.corpo(pedido.id);
 
   let response: Response;
   try {

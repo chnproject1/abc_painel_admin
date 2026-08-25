@@ -337,53 +337,36 @@ export default function PedidoUsPage() {
           </button>
         </section>
 
-        {/* Ações — disparam os fluxos n8n da operação US */}
+        {/* Ações — mesmo formato do BR, com um "gerar e enviar" a mais */}
         <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
           <Acao
+            titulo="Enviar ao cliente"
+            descricao="Envia por e-mail tudo o que já foi gerado — música principal, extras e páginas conforme o que ele comprou."
+            rotulo={acionando === "envio" ? "Enviando..." : "Enviar"}
+            cor="bg-blue-600 hover:bg-blue-700"
+            disabled={!!acionando}
+            onClick={() => acionar("envio")}
+          />
+
+          <Acao
             titulo="Gerar música principal"
-            descricao="Reenvia o pedido para produção e regera a música 1."
-            rotulo={acionando === "principal" ? "Gerando..." : "Gerar"}
+            descricao="Reenvia para produção e atualiza a música 1 do cliente."
+            rotulo={acionando === "principal" ? "Gerando..." : "Gerar e enviar"}
             disabled={!!acionando}
             onClick={() => acionar("principal")}
           />
 
-          {temExtras && (
-            <Acao
-              titulo="Gerar músicas extras"
-              descricao="Regera as músicas 2 e 3 compradas no upsell 2 ou no downsell."
-              rotulo={acionando === "upsell" ? "Gerando..." : "Gerar"}
-              disabled={!!acionando}
-              onClick={() => acionar("upsell")}
-            />
-          )}
-
-          <div className="p-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Reenviar ao cliente</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Envia por e-mail o que já foi gerado, sem passar pela Suno de novo.
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => acionar("envio", "principal")}
-                disabled={!!acionando}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 text-sm transition-colors"
-              >
-                {acionando === "envio:principal" ? "Enviando..." : "Música 1"}
-              </button>
-              {temExtras && (
-                <button
-                  onClick={() => acionar("envio", "extras")}
-                  disabled={!!acionando}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 text-sm transition-colors"
-                >
-                  {acionando === "envio:extras" ? "Enviando..." : "Extras"}
-                </button>
-              )}
-            </div>
-          </div>
+          <Acao
+            titulo="Gerar músicas extras"
+            descricao={temExtras
+              ? "Reenvia para produção e atualiza as músicas 2 e 3 do upsell 2 ou do downsell."
+              : "Indisponível — este cliente não comprou o upsell 2 nem o downsell."}
+            rotulo={acionando === "upsell" ? "Gerando..." : "Gerar e enviar"}
+            disabled={!!acionando || !temExtras}
+            onClick={() => acionar("upsell")}
+          />
         </section>
+
       </main>
     </div>
   );
@@ -392,9 +375,10 @@ export default function PedidoUsPage() {
 /* ── Sub-componentes ── */
 
 function Acao({
-  titulo, descricao, rotulo, disabled, onClick,
+  titulo, descricao, rotulo, disabled, onClick, cor = "bg-avocado-600 hover:bg-avocado-700",
 }: {
-  titulo: string; descricao: string; rotulo: string; disabled: boolean; onClick: () => void;
+  titulo: string; descricao: string; rotulo: string; disabled: boolean;
+  onClick: () => void; cor?: string;
 }) {
   return (
     <div className="p-5 flex items-center justify-between gap-4">
@@ -405,7 +389,7 @@ function Acao({
       <button
         onClick={onClick}
         disabled={disabled}
-        className="shrink-0 bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
+        className={`shrink-0 ${cor} disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors`}
       >
         {rotulo}
       </button>
