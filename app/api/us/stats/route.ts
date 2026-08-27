@@ -40,7 +40,10 @@ export async function GET() {
     erro_geracao,
     pendentes_envio_up,
     erro_geracao_up,
-    receita,
+    recInicial,
+    recUp1,
+    recUp2,
+    recDs,
   ] = await Promise.all([
     // Iniciaram o checkout
     prisma.pedidoUs.count(),
@@ -73,18 +76,23 @@ export async function GET() {
       },
     }),
 
-    // Faturamento somado das quatro ofertas
-    prisma.pedidoUs.aggregate({
-      _sum: { valor: true, up1_valor: true, up2_valor: true, ds_valor: true },
-    }),
+    /* Faturamento por oferta. Cada valor só conta quando A SUA oferta foi
+       paga: o `valor` é gravado na criação do pedido, então somar sem
+       filtro faria carrinho abandonado aparecer como receita. Por isso são
+       quatro consultas e não um aggregate só — os status são diferentes. */
+    prisma.pedidoUs.aggregate({ where: { status: "pago" },     _sum: { valor: true } }),
+    prisma.pedidoUs.aggregate({ where: { up1_status: "pago" }, _sum: { up1_valor: true } }),
+    prisma.pedidoUs.aggregate({ where: { up2_status: "pago" }, _sum: { up2_valor: true } }),
+    prisma.pedidoUs.aggregate({ where: { ds_status: "pago" },  _sum: { ds_valor: true } }),
   ]);
 
   const soma = (v: unknown) => Number(v ?? 0);
-  const receita_total =
-    soma(receita._sum.valor) +
-    soma(receita._sum.up1_valor) +
-    soma(receita._sum.up2_valor) +
-    soma(receita._sum.ds_valor);
+
+  const receitaInicial = soma(recInicial._sum.valor);
+  const receitaUp1     = soma(recUp1._sum.up1_valor);
+  const receitaUp2     = soma(recUp2._sum.up2_valor);
+  const receitaDs      = soma(recDs._sum.ds_valor);
+  const receita_total  = receitaInicial + receitaUp1 + receitaUp2 + receitaDs;
 
   return NextResponse.json({
     total,
@@ -97,10 +105,10 @@ export async function GET() {
     pendentes_envio_up,
     erro_geracao_up,
     receita: {
-      inicial: soma(receita._sum.valor),
-      up1:     soma(receita._sum.up1_valor),
-      up2:     soma(receita._sum.up2_valor),
-      ds:      soma(receita._sum.ds_valor),
+      inicial: receitaInicial,
+      up1:     receitaUp1,
+      up2:     receitaUp2,
+      ds:      receitaDs,
       total:   receita_total,
     },
   });
