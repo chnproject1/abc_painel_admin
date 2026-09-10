@@ -54,12 +54,81 @@ model Pedido {
   tentativa_geracao Int      @default(0)
   tentativa_envio   Int      @default(0)
 
+  // Conversao ja registrada na UTMify. Os pagos anteriores foram marcados
+  // true num backfill, entao o painel nasce sem pendencia acumulada.
+  rastreado         Boolean  @default(false)
+
   criado_em        DateTime  @default(now())
   atualizado_em    DateTime  @updatedAt
+
+  // Upsell de vídeo (fotos + música). Um por pedido, criado quando o n8n
+  // monta a mensagem da música com o link do upsell.
+  video            PedidoVideo?
 
   @@index([telefone])
   @@index([email])
   @@index([status])
+}
+
+// Upsell de vídeo — clipe vertical com as fotos do cliente e a música como
+// trilha. Um por pedido (1:1 com Pedido). Nome, telefone e a URL da música
+// (link_audio) ficam em Pedido; aqui só o que é do vídeo.
+//
+// Venda e produção em colunas separadas, como em Pedido: status conta a
+// venda, producao diz em que ponto o pedido está.
+//   status:   pendente -> pago
+//   producao: aguardando_fotos -> fotos_enviadas -> renderizando -> concluido
+//             (qualquer etapa pode cair em erro)
+// Quem grava cada coluna: n8n (criação, render, entrega), página/Netlify
+// (fotos, pagamento) — o portal só guarda e responde. Arquivos ficam no
+// Supabase Storage (buckets públicos fotos/ e videos/); aqui vai só o path.
+model PedidoVideo {
+  pedido_id String @id // pix_char da música (= Pedido.id)
+  pedido    Pedido @relation(fields: [pedido_id], references: [id])
+
+  token    String @unique // aleatório, vai no link /upvideo/?t=
+  status   String @default("pendente") // venda: pendente | pago
+  producao String @default("aguardando_fotos")
+
+  // Fotos do cliente: [{path, w, h, ordem}] — path = fotos/<token>/1.jpg
+  fotos      Json     @default("[]")
+  opcoes     Json     @default("{}") // {card_nome: true}
+  musica_seg Decimal? @db.Decimal(8, 2) // duração da música (ffprobe), preenchida no render
+
+  // Arquivos gerados (bucket videos/)
+  video_path    String? // videos/<token>/final.mp4     1080x1920
+  whatsapp_path String? // videos/<token>/whatsapp.mp4  720p, até 16 MB
+
+  // Pagamento do upsell (PIX próprio, diferente do da música)
+  pagamento_id String?  @unique // pix_char do PIX do vídeo
+  valor        Decimal? @db.Decimal(10, 2)
+
+  // Entrega e erro
+  entrega_whatsapp Boolean @default(false)
+  erro_msg         String?
+  tentativas       Int     @default(0)
+
+  // Origem do clique no link do upsell (canal da mensagem), separada da
+  // origem da compra da música que está em Pedido.
+  utm_source   String?
+  utm_medium   String?
+  utm_campaign String?
+  utm_content  String?
+  utm_term     String?
+
+  // Linha do tempo — é daqui que sai o funil do upsell (enviado > aberto >
+  // fotos > pago > concluído)
+  enviado_em    DateTime? // link foi na mensagem da música
+  aberto_em     DateTime? // cliente abriu o link
+  fotos_em      DateTime?
+  pago_em       DateTime?
+  concluido_em  DateTime?
+  criado_em     DateTime  @default(now())
+  atualizado_em DateTime  @updatedAt
+
+  @@index([status])
+  @@index([producao])
+  @@index([criado_em])
 }
 
 // Operação Estados Unidos — mesma função do model Pedido, colunas próprias.
@@ -153,6 +222,13 @@ model PedidoUs {
   ttclid        String?
   pixel_id      String?
   ip            String?
+
+  // Cookies e user-agent do navegador. Pesam mais que o fbclid no pareamento
+  // do Meta CAPI e do TikTok Events API — o fbc remontado a partir do fbclid
+  // carrega o timestamp do pagamento, não o do clique.
+  fbp           String?
+  ttp           String?
+  user_agent    String?
 
   criado_em     DateTime  @default(now())
   atualizado_em DateTime  @updatedAt

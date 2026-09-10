@@ -39,6 +39,12 @@ export async function GET(req: NextRequest) {
       where.entrega_email = false;
       where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
+    // Pagou mas a conversão não foi registrada na UTMify
+    case "rastreio":
+      where.status = "pago";
+      where.rastreado = false;
+      where.data_pedido = { gte: INICIO_AUTOMACAO };
+      break;
   }
 
   if (dataParam) {

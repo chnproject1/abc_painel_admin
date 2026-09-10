@@ -23,6 +23,7 @@ interface Pedido {
   link_mp4?: string;
   valor?: string;
   data_pedido?: string;
+  rastreado?: boolean;
 }
 
 interface Toast {
@@ -239,6 +240,16 @@ export default function PedidoPage() {
             labelAtivo="Entregue"
             labelInativo="Não entregue"
           />
+          {isAdmin && pedido.status === "pago" && (
+            <StatusIndicator
+              label="Rastreio"
+              ativo={!!pedido.rastreado}
+              corAtivo="text-green-600"
+              corInativo="text-blue-600"
+              labelAtivo="Registrado"
+              labelInativo="Pendente"
+            />
+          )}
           {pedido.data_pedido && (
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-gray-400">Data do pedido</span>

@@ -13,7 +13,7 @@ export async function GET() {
 
   const filtroBase = { data_pedido: { gte: INICIO_AUTOMACAO } };
 
-  const [total, pagos, pendentes_envio, erro_geracao] = await Promise.all([
+  const [total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio] = await Promise.all([
     // Total que iniciaram checkout
     prisma.pedido.count({ where: filtroBase }),
 
@@ -40,7 +40,12 @@ export async function GET() {
         entrega_email: false,
       },
     }),
+
+    // Pagaram mas a conversão nunca foi registrada na UTMify
+    prisma.pedido.count({
+      where: { ...filtroBase, status: "pago", rastreado: false },
+    }),
   ]);
 
-  return NextResponse.json({ total, pagos, pendentes_envio, erro_geracao });
+  return NextResponse.json({ total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio });
 }

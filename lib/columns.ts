@@ -36,6 +36,7 @@ export const CAMPOS_OPERADOR = [
 
 // Campos extras visíveis apenas para ADMIN
 export const CAMPOS_ADMIN_EXTRAS = [
+  "rastreado",
   "data_pedido",
   "valor",
   "utm_source",
@@ -138,6 +139,9 @@ export const CAMPOS_US_ADMIN_EXTRAS = [
   "ttclid",
   "pixel_id",
   "ip",
+  "fbp",
+  "ttp",
+  "user_agent",
   "funil",
   "recovery_id",
   "recuperacao",

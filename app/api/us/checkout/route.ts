@@ -47,6 +47,7 @@ const MAPA_FUNIL: Record<string, string> = {
   utm_medium: "utm_medium",     utm_content: "utm_content",
   utm_term: "utm_term",         utm_id: "utm_id",
   fbclid: "fbclid",   ttclid: "ttclid",   pixel_id: "pixel_id",
+  fbp: "fbp",         ttp: "ttp",         user_agent: "user_agent",
   ip: "ip",           funil: "funil",     recovery_id: "recovery_id",
   upsell: "upsell",
   upsell_status: "upsell_status",
@@ -266,6 +267,9 @@ export async function GET(req: NextRequest) {
       ttclid:       p.ttclid,
       pixel_id:     p.pixel_id,
       ip:           p.ip,
+      fbp:          p.fbp,
+      ttp:          p.ttp,
+      user_agent:   p.user_agent,
     },
   });
 }

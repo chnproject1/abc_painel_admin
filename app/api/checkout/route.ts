@@ -51,7 +51,30 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  if (!pedido) return NextResponse.json({ data: {} });
+  // Não é PIX de música: pode ser o PIX de um upsell de vídeo. O webhook da
+  // Netlify consulta aqui pelo id e decide o caminho pelo plan devolvido.
+  if (!pedido) {
+    const video = await prisma.pedidoVideo.findUnique({
+      where: { pagamento_id: id },
+      include: { pedido: { select: { nome: true, telefone: true, email: true, cpf: true } } },
+    });
+    if (!video) return NextResponse.json({ data: {} });
+    return NextResponse.json({
+      data: {
+        id,
+        plan:      "video",
+        status:    video.status,          // pendente | pago — mesma semântica do pedido
+        producao:  video.producao,
+        pedido_id: video.pedido_id,       // pix_char da música, pro n8n achar o pedido
+        token:     video.token,
+        name:      video.pedido.nome,
+        phone:     video.pedido.telefone,
+        mail:      video.pedido.email,
+        cpf:       video.pedido.cpf,
+        valor:     video.valor != null ? Number(video.valor) : null,
+      },
+    });
+  }
 
   // Mantém os mesmos nomes de campo do Apps Script
   return NextResponse.json({
@@ -108,9 +131,20 @@ export async function POST(req: NextRequest) {
         select: { recovery_id: true },
       });
     } catch (e: any) {
-      // P2025 = pedido não encontrado (PIX confirmado mas nunca registrado no banco)
+      // P2025 = não é pedido de música. Antes de desistir, tenta como PIX de
+      // upsell de vídeo (PedidoVideo.pagamento_id). Idempotente: pago fica pago.
       if (e?.code === "P2025") {
-        return ok({ message: "Pedido não encontrado, ignorado" });
+        const video = await prisma.pedidoVideo.findUnique({
+          where: { pagamento_id: data.id },
+          select: { pedido_id: true, status: true },
+        });
+        if (!video) return ok({ message: "Pedido não encontrado, ignorado" });
+        if (video.status === "pago") return ok({ message: "Vídeo já estava pago", plan: "video", skipped: true });
+        await prisma.pedidoVideo.update({
+          where: { pagamento_id: data.id },
+          data: { status: "pago", pago_em: new Date() },
+        });
+        return ok({ message: "Vídeo marcado como pago", plan: "video", pedido_id: video.pedido_id });
       }
       throw e;
     }
@@ -124,6 +158,23 @@ export async function POST(req: NextRequest) {
     }
 
     return ok({ message: "Status atualizado para pago" });
+  }
+
+  // action: 'rastreado' → a conversão já foi registrada na UTMify.
+  // Ação própria de propósito: o 'update' acima significa "marque como pago"
+  // e ignora o resto do corpo, então estendê-lo mudaria o contrato do funil.
+  if (data.action === "rastreado") {
+    if (!data.id) return erro("id obrigatório", 400);
+    try {
+      await prisma.pedido.update({
+        where: { id: data.id },
+        data: { rastreado: data.rastreado === false ? false : true },
+      });
+    } catch (e: any) {
+      if (e?.code === "P2025") return ok({ message: "Pedido não encontrado, ignorado" });
+      throw e;
+    }
+    return ok({ message: "Pedido marcado como rastreado" });
   }
 
   // Sem action → novo pedido vindo do checkout

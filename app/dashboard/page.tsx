@@ -27,6 +27,7 @@ interface Stats {
   pagos: number;
   pendentes_envio: number;
   erro_geracao: number;
+  pendentes_rastreio: number;
 }
 
 const STATUS_COR: Record<string, string> = {
@@ -42,6 +43,7 @@ const FILTRO_LABEL: Record<string, string> = {
   pagos:     "Compraram",
   pendentes: "Pendentes envio",
   erro:      "Erro de geração",
+  rastreio:  "Pendentes de rastreio",
 };
 
 function StatCard({
@@ -284,11 +286,12 @@ function DashboardContent() {
         {isAdmin && stats && (
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
               <StatCard label="Total"           value={stats.total}           cor="bg-white border-gray-200 text-gray-800"          ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
               <StatCard label="Pagas"           value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"      ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
               <StatCard label="Pendentes envio" value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800"   ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
               <StatCard label="Erro de geração" value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"            ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
+              <StatCard label="Sem rastreio"    value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"      ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
             </div>
           </div>
         )}
