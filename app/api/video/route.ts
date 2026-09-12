@@ -51,6 +51,7 @@ function serializar(v: any) {
       email:    v.pedido.email,
       cpf:      v.pedido.cpf,
       musica:   v.pedido.link_audio,
+      pixel_id: v.pedido.pixel_id,   // pixel da compra da música: a página carrega Meta ou TikTok conforme ele
     },
   };
 }
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
 
   const video = await prisma.pedidoVideo.findUnique({
     where: { token: t },
-    include: { pedido: { select: { nome: true, telefone: true, email: true, cpf: true, link_audio: true } } },
+    include: { pedido: { select: { nome: true, telefone: true, email: true, cpf: true, link_audio: true, pixel_id: true } } },
   });
   if (!video) return erro("token inválido", 404);
 

@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
 
   return new NextResponse(buffer, {
     headers: {
-      "Content-Type":        "audio/mpeg",
+      // vídeo do upsell passa por aqui também; antes era sempre audio/mpeg
+      "Content-Type":        /\.mp4(\?|$)/i.test(url) ? "video/mp4" : (res.headers.get("content-type") || "audio/mpeg"),
       "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${utf8Encoded}`,
     },
   });

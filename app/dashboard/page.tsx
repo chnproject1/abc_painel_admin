@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import SeletorPais from "@/components/SeletorPais";
+import { estadoVideo, type VideoResumo } from "@/lib/video-estado";
 
 interface Pedido {
   id: string;
@@ -20,6 +21,7 @@ interface Pedido {
   data_pedido?: string;
   entrega_whatsapp?: boolean;
   entrega_email?: boolean;
+  video?: VideoResumo | null;
 }
 
 interface Stats {
@@ -28,6 +30,7 @@ interface Stats {
   pendentes_envio: number;
   erro_geracao: number;
   pendentes_rastreio: number;
+  video?: { total: number; pagos: number; pendentes_envio: number; erro_geracao: number };
 }
 
 const STATUS_COR: Record<string, string> = {
@@ -44,6 +47,10 @@ const FILTRO_LABEL: Record<string, string> = {
   pendentes: "Pendentes envio",
   erro:      "Erro de geração",
   rastreio:  "Pendentes de rastreio",
+  video_todos:     "Vídeo: todos os links",
+  video_pagos:     "Vídeo: compraram",
+  video_pendentes: "Vídeo: pendentes envio",
+  video_erro:      "Vídeo: erro de geração",
 };
 
 function StatCard({
@@ -99,6 +106,9 @@ function PedidoCard({ p }: { p: Pedido }) {
           </p>
           {alertaPago  && <p className="text-xs text-red-500 font-medium mt-1">Pago — música não gerada</p>}
           {naoEntregue && <p className="text-xs text-yellow-600 font-medium mt-1">Música gerada — aguardando entrega</p>}
+          {p.video && (() => { const e = estadoVideo(p.video); return (
+            <p className="text-xs font-medium mt-1"><span className={`px-1.5 py-0.5 rounded ${e.cor}`}>🎬 Vídeo: {e.rotulo}</span></p>
+          ); })()}
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_COR[p.status] ?? "bg-gray-100 text-gray-600"}`}>
@@ -293,6 +303,15 @@ function DashboardContent() {
               <StatCard label="Erro de geração" value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"            ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
               <StatCard label="Sem rastreio"    value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"      ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
             </div>
+            {stats.video && (<>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Vídeo (upsell)</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <StatCard label="Links enviados"  value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video_todos"}     onClick={() => handleCardClick("video_todos")} />
+                <StatCard label="Pagas"           value={stats.video.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "video_pagos"}     onClick={() => handleCardClick("video_pagos")} />
+                <StatCard label="Pendentes envio" value={stats.video.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "video_pendentes"} onClick={() => handleCardClick("video_pendentes")} />
+                <StatCard label="Erro de geração" value={stats.video.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "video_erro"}      onClick={() => handleCardClick("video_erro")} />
+              </div>
+            </>)}
           </div>
         )}
 

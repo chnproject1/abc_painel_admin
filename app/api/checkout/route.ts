@@ -56,9 +56,15 @@ export async function GET(req: NextRequest) {
   if (!pedido) {
     const video = await prisma.pedidoVideo.findUnique({
       where: { pagamento_id: id },
-      include: { pedido: { select: { nome: true, telefone: true, email: true, cpf: true } } },
+      include: { pedido: { select: {
+        nome: true, telefone: true, email: true, cpf: true, nomefiscal: true, ip: true,
+        // atribuição da compra da música: é com ela que o trackeamento casa a venda do vídeo
+        pixel_id: true, fbclid: true, ttclid: true,
+        utm_source: true, utm_medium: true, utm_campaign: true, utm_content: true, utm_term: true, utm_id: true,
+      } } },
     });
     if (!video) return NextResponse.json({ data: {} });
+    const p = video.pedido;
     return NextResponse.json({
       data: {
         id,
@@ -67,11 +73,18 @@ export async function GET(req: NextRequest) {
         producao:  video.producao,
         pedido_id: video.pedido_id,       // pix_char da música, pro n8n achar o pedido
         token:     video.token,
-        name:      video.pedido.nome,
-        phone:     video.pedido.telefone,
-        mail:      video.pedido.email,
-        cpf:       video.pedido.cpf,
+        name:      p.nome,
+        nomefiscal: p.nomefiscal,
+        phone:     p.telefone,
+        mail:      p.email,
+        cpf:       p.cpf,
+        ip:        p.ip,
         valor:     video.valor != null ? Number(video.valor) : null,
+        pixel_id:  p.pixel_id,
+        fbclid:    p.fbclid,
+        ttclid:    p.ttclid,
+        utm_source: p.utm_source, utm_medium: p.utm_medium, utm_campaign: p.utm_campaign,
+        utm_content: p.utm_content, utm_term: p.utm_term, utm_id: p.utm_id,
       },
     });
   }

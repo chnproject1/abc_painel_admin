@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { selectPorRole } from "@/lib/columns";
+import { linkVideo, urlPublica } from "@/lib/video";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -17,7 +18,29 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   if (!pedido) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
-  return NextResponse.json(pedido);
+
+  // Upsell de vídeo, se existir. Só leitura: a atendente pega o link e o
+  // arquivo daqui; o vídeo não é ajustado no painel.
+  const video = await prisma.pedidoVideo.findUnique({
+    where: { pedido_id: id },
+    select: {
+      token: true, status: true, producao: true, fotos: true, valor: true,
+      video_path: true, entrega_whatsapp: true, erro_msg: true, tentativas: true,
+      enviado_em: true, aberto_em: true, fotos_em: true, pago_em: true, concluido_em: true, atualizado_em: true,
+    },
+  });
+
+  return NextResponse.json({
+    ...pedido,
+    video: video ? {
+      ...video,
+      valor: video.valor != null ? Number(video.valor) : null,
+      fotos_qtd: Array.isArray(video.fotos) ? (video.fotos as unknown[]).length : 0,
+      fotos: undefined,
+      link: linkVideo(video.token),
+      video_url: urlPublica(video.video_path),
+    } : null,
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

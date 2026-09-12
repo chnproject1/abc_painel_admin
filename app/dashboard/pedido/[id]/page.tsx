@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
+import { estadoVideo, PRODUCAO_LABEL, type VideoResumo } from "@/lib/video-estado";
 
 interface Pedido {
   id: string;
@@ -24,6 +25,10 @@ interface Pedido {
   valor?: string;
   data_pedido?: string;
   rastreado?: boolean;
+  video?: (VideoResumo & {
+    token: string; valor?: number | null; fotos_qtd: number; tentativas: number;
+    enviado_em?: string | null; aberto_em?: string | null; link: string; video_url?: string | null;
+  }) | null;
 }
 
 interface Toast {
@@ -414,6 +419,50 @@ export default function PedidoPage() {
           </div>
         </section>
 
+        {/* Upsell de vídeo — só leitura: a atendente pega o link e o arquivo aqui */}
+        {pedido.video && (() => {
+          const v = pedido.video;
+          const e = estadoVideo(v);
+          const dt = (d?: string | Date | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
+          return (
+            <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo (upsell)</h2>
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
+              </div>
+              <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <Campo label="Venda" valor={v.status === "pago" ? `Pago${v.valor != null ? ` · R$ ${Number(v.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}` : "Não pagou"} />
+                <Campo label="Produção" valor={PRODUCAO_LABEL[v.producao] ?? v.producao} />
+                <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
+                <Campo label="Entrega WhatsApp" valor={v.entrega_whatsapp ? "✓ Enviado" : "✕ Não enviado"} />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <Campo label="Link enviado" valor={dt(v.enviado_em) ?? "—"} />
+                <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
+                <Campo label="Pago em" valor={dt(v.pago_em) ?? "—"} />
+                <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {v.video_url && (
+                  <a
+                    href={`/api/download?url=${encodeURIComponent(v.video_url)}&filename=${encodeURIComponent(`video-${pedido.nome || "cliente"}.mp4`)}`}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-avocado-600 hover:bg-avocado-700 text-white text-sm font-medium transition-colors"
+                  >
+                    ⬇️ Baixar vídeo
+                  </a>
+                )}
+                {v.video_url && <LinkBtn href={v.video_url} label="▶️ Ver vídeo" />}
+                <LinkBtn href={v.link} label="🔗 Página do cliente" />
+              </div>
+              {e.chave === "pendente_envio" && (
+                <p className="text-xs text-yellow-800 mt-3">Baixe o vídeo e mande pro cliente no WhatsApp <span className="font-mono">{pedido.telefone}</span>.</p>
+              )}
+            </section>
+          );
+        })()}
 
       </main>
     </div>
