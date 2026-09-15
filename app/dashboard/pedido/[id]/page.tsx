@@ -26,7 +26,7 @@ interface Pedido {
   data_pedido?: string;
   rastreado?: boolean;
   video?: (VideoResumo & {
-    token: string; valor?: number | null; fotos_qtd: number; tentativas: number;
+    token: string; valor?: number | null; fotos_qtd: number; tentativas: number; rastreado?: boolean;
     enviado_em?: string | null; aberto_em?: string | null; link: string; video_url?: string | null;
   }) | null;
 }
@@ -438,6 +438,11 @@ export default function PedidoPage() {
                 <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
                 <Campo label="Entrega WhatsApp" valor={v.entrega_whatsapp ? "✓ Enviado" : "✕ Não enviado"} />
               </div>
+              {v.status === "pago" && (
+                <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+                  {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
+                </p>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <Campo label="Link enviado" valor={dt(v.enviado_em) ?? "—"} />
                 <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />

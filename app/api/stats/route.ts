@@ -52,7 +52,7 @@ export async function GET() {
   // "Erro de geração" inclui o render que falhou E o que travou: renderizando
   // sem atualização, ou pago sem o render começar, há mais de VIDEO_TRAVADO_MIN.
   const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
-  const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao] = await Promise.all([
+  const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao, video_sem_rastreio] = await Promise.all([
     prisma.pedidoVideo.count(),
     prisma.pedidoVideo.count({ where: { status: "pago" } }),
     prisma.pedidoVideo.count({ where: { status: "pago", entrega_whatsapp: false } }),
@@ -66,10 +66,12 @@ export async function GET() {
         ],
       },
     }),
+    // Pagou mas o fluxo track_upsell nunca marcou a venda como registrada
+    prisma.pedidoVideo.count({ where: { status: "pago", rastreado: false } }),
   ]);
 
   return NextResponse.json({
     total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio,
-    video: { total: video_total, pagos: video_pagos, pendentes_envio: video_pendentes_envio, erro_geracao: video_erro_geracao },
+    video: { total: video_total, pagos: video_pagos, pendentes_envio: video_pendentes_envio, erro_geracao: video_erro_geracao, sem_rastreio: video_sem_rastreio },
   });
 }

@@ -21,6 +21,7 @@ CREATE TABLE "PedidoVideo" (
     "entrega_whatsapp" BOOLEAN NOT NULL DEFAULT false,
     "erro_msg"         TEXT,
     "tentativas"       INTEGER NOT NULL DEFAULT 0,
+    "rastreado"        BOOLEAN NOT NULL DEFAULT false,             -- venda registrada pelo fluxo track_upsell
     "utm_source"       TEXT,
     "utm_medium"       TEXT,
     "utm_campaign"     TEXT,

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { pedido_id: id },
     select: {
       token: true, status: true, producao: true, fotos: true, valor: true,
-      video_path: true, entrega_whatsapp: true, erro_msg: true, tentativas: true,
+      video_path: true, entrega_whatsapp: true, erro_msg: true, tentativas: true, rastreado: true,
       enviado_em: true, aberto_em: true, fotos_em: true, pago_em: true, concluido_em: true, atualizado_em: true,
     },
   });

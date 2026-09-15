@@ -108,6 +108,9 @@ model PedidoVideo {
   erro_msg         String?
   tentativas       Int     @default(0)
 
+  // Venda registrada na UTMify/Meta pelo fluxo track_upsell (Power Automate)
+  rastreado        Boolean @default(false)
+
   // Origem do clique no link do upsell (canal da mensagem), separada da
   // origem da compra da música que está em Pedido.
   utm_source   String?

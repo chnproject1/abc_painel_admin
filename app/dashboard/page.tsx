@@ -30,7 +30,7 @@ interface Stats {
   pendentes_envio: number;
   erro_geracao: number;
   pendentes_rastreio: number;
-  video?: { total: number; pagos: number; pendentes_envio: number; erro_geracao: number };
+  video?: { total: number; pagos: number; pendentes_envio: number; erro_geracao: number; sem_rastreio: number };
 }
 
 const STATUS_COR: Record<string, string> = {
@@ -51,6 +51,7 @@ const FILTRO_LABEL: Record<string, string> = {
   video_pagos:     "Vídeo: compraram",
   video_pendentes: "Vídeo: pendentes envio",
   video_erro:      "Vídeo: erro de geração",
+  video_rastreio:  "Vídeo: sem rastreio",
 };
 
 function StatCard({
@@ -305,11 +306,12 @@ function DashboardContent() {
             </div>
             {stats.video && (<>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Vídeo (upsell)</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                 <StatCard label="Links enviados"  value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video_todos"}     onClick={() => handleCardClick("video_todos")} />
                 <StatCard label="Pagas"           value={stats.video.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "video_pagos"}     onClick={() => handleCardClick("video_pagos")} />
                 <StatCard label="Pendentes envio" value={stats.video.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "video_pendentes"} onClick={() => handleCardClick("video_pendentes")} />
                 <StatCard label="Erro de geração" value={stats.video.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "video_erro"}      onClick={() => handleCardClick("video_erro")} />
+                <StatCard label="Sem rastreio"    value={stats.video.sem_rastreio}    cor="bg-blue-50 border-blue-200 text-blue-800"       ativo={filtroAtivo === "video_rastreio"}  onClick={() => handleCardClick("video_rastreio")} />
               </div>
             </>)}
           </div>

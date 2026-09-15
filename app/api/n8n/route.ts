@@ -174,6 +174,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Vídeo marcado como entregue no WhatsApp" });
     }
 
+    // Venda do vídeo registrada na UTMify/Meta/TikTok pelo fluxo track_upsell
+    // (Power Automate). O `id` aqui é o PIX do VÍDEO (pagamento_id), que é o
+    // que o fluxo recebe; o conector Postgres do PA não lê PedidoVideo (jsonb).
+    if (action === "video_rastreado") {
+      const video = await prisma.pedidoVideo.findUnique({ where: { pagamento_id: id }, select: { pedido_id: true, rastreado: true } });
+      if (!video) return NextResponse.json({ success: false, error: "Vídeo não encontrado para esse PIX" }, { status: 404 });
+      if (video.rastreado) return NextResponse.json({ success: true, ja_estava: true, message: "Já estava marcado como rastreado" });
+      await prisma.pedidoVideo.update({ where: { pedido_id: video.pedido_id }, data: { rastreado: true } });
+      return NextResponse.json({ success: true, ja_estava: false, message: "Venda do vídeo marcada como rastreada" });
+    }
+
     // Música regenerada depois do vídeo comprado: a trilha mudou, então o
     // vídeo é feito de novo sem cobrar. Só volta a produção; a venda fica.
     if (action === "video_regerar") {

@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
     case "video_pendentes":
       where.video = { is: { status: "pago", entrega_whatsapp: false } };
       break;
+    case "video_rastreio":
+      where.video = { is: { status: "pago", rastreado: false } };
+      break;
     case "video_erro": {
       const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
       where.video = { is: {
