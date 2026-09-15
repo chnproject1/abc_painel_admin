@@ -80,6 +80,9 @@ export async function GET(req: NextRequest) {
         cpf:       p.cpf,
         ip:        p.ip,
         valor:     video.valor != null ? Number(video.valor) : null,
+        // datas do VÍDEO (ISO UTC): o track_upsell usa pago_em como data da venda na UTMify
+        criado_em: video.criado_em.toISOString(),
+        pago_em:   video.pago_em ? video.pago_em.toISOString() : null,
         pixel_id:  p.pixel_id,
         fbclid:    p.fbclid,
         ttclid:    p.ttclid,
