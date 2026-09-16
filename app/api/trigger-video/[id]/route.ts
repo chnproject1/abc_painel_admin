@@ -5,12 +5,15 @@ import { prisma } from "@/lib/prisma";
 import { estadoVideo } from "@/lib/video-estado";
 
 /*
-  Botão "Refazer vídeo" do painel: devolve o pedido pra fila de render.
+  Botão "Refazer vídeo" do painel: manda o pedido pra produção de novo.
 
-  Não dispara webhook — o fluxo de render pega quem está `pago` +
-  `fotos_enviadas`, o mesmo caminho da primeira vez. É o equivalente com
-  sessão do `video_regerar` de /api/n8n, que exige o segredo do callback
-  e por isso não serve pro navegador.
+  Não existe fila que varre a tabela — o render só começa quando alguém
+  chama o `Webhook - Vídeo Pago` do n8n (path `video-producao`), o mesmo
+  que o pagamento dispara. Mexer só no banco não acorda ninguém.
+
+  A ordem importa: primeiro limpa a linha, depois chama o n8n. Ao contrário,
+  o fluxo já teria gravado `renderizando` e o nosso update jogaria de volta
+  pra `fotos_enviadas`, matando o render que acabou de começar.
 
   Quem decide se pode é o `estadoVideo`, o mesmo que pinta o card. Assim
   o botão e a rota nunca discordam: o card só mostra o botão no estado
@@ -48,6 +51,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  const webhookUrl = process.env.N8N_WEBHOOK_VIDEO_URL;
+  if (!webhookUrl) {
+    return NextResponse.json({ error: "N8N_WEBHOOK_VIDEO_URL não configurada" }, { status: 500 });
+  }
+
   await prisma.pedidoVideo.update({
     where: { pedido_id: id },
     data: {
@@ -59,5 +67,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
+  let resposta: Response;
+  try {
+    resposta = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: id }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (e: any) {
+    await marcarFalha(id, `não consegui chamar o n8n: ${e?.message ?? e}`);
+    return NextResponse.json({ error: "O n8n não respondeu. Tente de novo." }, { status: 502 });
+  }
+
+  if (!resposta.ok) {
+    await marcarFalha(id, `o n8n respondeu ${resposta.status} ao iniciar o render`);
+    return NextResponse.json({ error: `O n8n recusou (${resposta.status}).` }, { status: 502 });
+  }
+
   return NextResponse.json({ ok: true });
+}
+
+/* Se o n8n não aceitou, a linha não pode ficar em `fotos_enviadas`: ela
+   passaria 20 minutos mostrando "aguardando render" enquanto ninguém está
+   renderizando. Volta pro erro com o motivo verdadeiro, que é o que o card
+   mostra. */
+async function marcarFalha(id: string, motivo: string) {
+  await prisma.pedidoVideo.update({
+    where: { pedido_id: id },
+    data: { producao: "erro", erro_msg: motivo.slice(0, 1000) },
+  }).catch(() => null);
 }
