@@ -66,6 +66,7 @@ export default function PedidoPage() {
   const [acionando, setAcionando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [refazendoVideo, setRefazendoVideo] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const role = (session?.user as any)?.role ?? "OPERADOR";
@@ -153,6 +154,27 @@ export default function PedidoPage() {
       mostrarToast("erro", e.message || "Erro ao enviar música.");
     } finally {
       setEnviando(false);
+    }
+  }
+
+  /* Devolve o vídeo pra fila de render. O estado local é atualizado na mão
+     porque a página não refaz o fetch — sem isso o card continuaria vermelho
+     e a atendente clicaria de novo. */
+  async function refazerVideo() {
+    if (!confirm("Mandar o vídeo de volta para a produção?")) return;
+    setRefazendoVideo(true);
+    try {
+      const res = await fetch(`/api/trigger-video/${id}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao refazer o vídeo");
+      setPedido(prev => prev?.video
+        ? { ...prev, video: { ...prev.video, producao: "fotos_enviadas", erro_msg: null, concluido_em: null, entrega_whatsapp: false, atualizado_em: new Date().toISOString() } }
+        : prev);
+      mostrarToast("ok", "Vídeo devolvido para a produção.");
+    } catch (e: any) {
+      mostrarToast("erro", e.message || "Erro ao refazer o vídeo.");
+    } finally {
+      setRefazendoVideo(false);
     }
   }
 
@@ -438,19 +460,33 @@ export default function PedidoPage() {
                 <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
                 <Campo label="Entrega WhatsApp" valor={v.entrega_whatsapp ? "✓ Enviado" : "✕ Não enviado"} />
               </div>
-              {v.status === "pago" && (
+              {/* Rastreio e linha do tempo são diagnóstico de operação: não
+                  ajudam quem está no atendimento e só competem por atenção
+                  com o estado e os botões. Ficam só para o admin. */}
+              {isAdmin && v.status === "pago" && (
                 <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
                   {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
                 </p>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <Campo label="Link enviado" valor={dt(v.enviado_em) ?? "—"} />
-                <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
-                <Campo label="Pago em" valor={dt(v.pago_em) ?? "—"} />
-                <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
-              </div>
+              {isAdmin && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <Campo label="Link enviado" valor={dt(v.enviado_em) ?? "—"} />
+                  <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
+                  <Campo label="Pago em" valor={dt(v.pago_em) ?? "—"} />
+                  <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-2">
+                {e.chave === "erro" && (
+                  <button
+                    onClick={refazerVideo}
+                    disabled={refazendoVideo}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                  >
+                    {refazendoVideo ? "Enviando..." : "🔄 Mandar pra produção de novo"}
+                  </button>
+                )}
                 {v.video_url && (
                   <a
                     href={`/api/download?url=${encodeURIComponent(v.video_url)}&filename=${encodeURIComponent(`video-${pedido.nome || "cliente"}.mp4`)}`}

@@ -68,9 +68,19 @@ export function estadoVideo(v: VideoResumo): EstadoVideo {
   }
 
   // pago mas a produção ainda não começou (fotos_enviadas / aguardando_fotos)
-  const min = minutosDesde(v.pago_em);
+  /* O relógio aqui é "há quanto tempo nada acontece", não "há quanto tempo
+     foi pago". Quando o vídeo volta pra fila — pelo botão do painel ou pelo
+     `video_regerar` do n8n — `pago_em` continua lá atrás, e usar só ele
+     devolvia o card pro vermelho no mesmo instante do reenvio: o botão
+     reaparecia e dava pra enfileirar o mesmo pedido várias vezes.
+     `atualizado_em` é @updatedAt, então marca o momento do reenvio. */
+  const ts = [v.pago_em, v.atualizado_em]
+    .map((d) => (d ? new Date(d).getTime() : NaN))
+    .filter((t) => !isNaN(t));
+  const min = minutosDesde(ts.length ? new Date(Math.max(...ts)) : null);
+
   if (min !== null && min > VIDEO_TRAVADO_MIN) {
-    return { chave: "erro", rotulo: "Erro de geração", detalhe: `Pago há ${min} min e o render nunca começou. O n8n não recebeu o pagamento; dispare o vídeo de novo.`, cor: vermelho };
+    return { chave: "erro", rotulo: "Erro de geração", detalhe: `Na fila há ${min} min e o render nunca começou. A produção não pegou o pedido; mande de novo pra produção.`, cor: vermelho };
   }
   return { chave: "renderizando", rotulo: "Aguardando render", detalhe: "Pagamento confirmado, esperando o render começar.", cor: azul };
 }
