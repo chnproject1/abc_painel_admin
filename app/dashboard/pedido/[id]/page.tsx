@@ -233,6 +233,13 @@ export default function PedidoPage() {
         >
           ← Voltar
         </button>
+        {/* Direto pra visão geral: quem pula de pedido em pedido não precisa voltar várias vezes */}
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-sm text-gray-500 hover:text-gray-800 font-medium shrink-0"
+        >
+          ⌂ Início
+        </button>
         <div className="flex-1 min-w-0 flex items-center gap-3">
           <h1 className="text-base font-bold text-gray-900 truncate">{pedido.nome}</h1>
           <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COR[pedido.status] ?? "bg-gray-100 text-gray-600"}`}>

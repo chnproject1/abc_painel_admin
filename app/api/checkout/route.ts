@@ -48,6 +48,12 @@ export async function GET(req: NextRequest) {
       ttclid: true,
       pixel_id: true,
       ip: true,
+      // recuperação de pedido (/recuperar/ no site)
+      cpf: true,
+      nomefiscal: true,
+      funil: true,
+      valor: true,
+      recovery_id: true,
     },
   });
 
@@ -98,6 +104,14 @@ export async function GET(req: NextRequest) {
       id:                id,
       status:            pedido.status,
       name:              pedido.nome,
+      // Recuperação de pedido (/recuperar/ no site): o PIX novo é criado com
+      // estes dados copiados do pendente. valor/funil/recovery_id também
+      // servem pro webhook e pro painel.
+      cpf:               pedido.cpf,
+      nomefiscal:        pedido.nomefiscal,
+      funil:             pedido.funil,
+      valor:             pedido.valor != null ? Number(pedido.valor) : null,
+      recovery_id:       pedido.recovery_id,
       phone:             pedido.telefone,
       plan:              pedido.plano,
       mail:              pedido.email,

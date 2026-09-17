@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const CHECKOUT_URL = "https://abcmusic-fb.netlify.app/";
+// Página de recuperação no site (abc-upvideo/recuperar/). O checkout antigo
+// (abcmusic-fb) não existe mais; esta rota fica só pra links já enviados.
+const RECUPERAR_URL = (process.env.RECUPERAR_URL || "https://abcmusic-quiz.netlify.app/recuperar/").replace(/\/$/, "") + "/";
 
 export async function GET(
   _req: NextRequest,
@@ -13,6 +15,15 @@ export async function GET(
     return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   }
 
+  const existe = await prisma.pedido.findUnique({ where: { id }, select: { id: true } });
+  if (!existe) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
+  return NextResponse.redirect(`${RECUPERAR_URL}?p=${encodeURIComponent(id)}`, 302);
+}
+
+// Versão antiga (checkout abcmusic-fb com os dados na URL). Mantida como
+// referência do que a página nova copia no servidor; não é mais chamada.
+export async function _redirecionarParaCheckoutAntigo(id: string) {
+  const CHECKOUT_URL = "https://abcmusic-fb.netlify.app/";
   const pedido = await prisma.pedido.findUnique({
     where: { id },
     select: {

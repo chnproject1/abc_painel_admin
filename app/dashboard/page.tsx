@@ -284,6 +284,10 @@ function DashboardContent() {
           <p className="text-xs text-gray-500 truncate">Olá, {session?.user?.name}</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {/* Visão de recuperação: só admin, sem card na tela principal */}
+          {isAdmin && (
+            <Link href="/dashboard/recuperacao" className="text-sm text-gray-500 hover:text-gray-700">Recuperação</Link>
+          )}
           <SeletorPais />
           <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-sm text-gray-500 hover:text-gray-700">
             Sair
