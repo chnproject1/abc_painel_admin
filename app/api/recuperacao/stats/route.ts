@@ -35,13 +35,26 @@ export async function GET(req: NextRequest) {
         AND data_pedido >= ${desde} AND data_pedido <= ${ate}
         AND status IN ('pendente', 'recuperado')
       GROUP BY recuperacao, status`,
+    /* Etapa do clique (linha filha):
+         1. `funil` da filha, gravado pela página a partir do link (&r=2) — o
+            jeito certo, desde 21/09;
+         2. sem isso: se a principal já está na 2 e a filha nasceu ANTES da
+            mensagem 2 sair (`atualizado_em` da principal), foi clique da 1;
+         3. principal `recuperado`: vale o contador dela, que para na compra. */
     prisma.$queryRaw<LinhaFilha[]>`
-      SELECT p.recuperacao AS etapa, c.status, COUNT(*)::int AS n,
+      SELECT CASE
+               WHEN c.funil = 'recuperacao-2' THEN 2
+               WHEN c.funil = 'recuperacao-1' THEN 1
+               WHEN p.status = 'recuperado' THEN p.recuperacao
+               WHEN p.recuperacao = 2 AND c.data_pedido < p.atualizado_em THEN 1
+               ELSE p.recuperacao
+             END AS etapa,
+             c.status, COUNT(*)::int AS n,
              COALESCE(SUM(CASE WHEN c.status = 'pago' THEN c.valor ELSE 0 END), 0)::float AS receita
       FROM "Pedido" c
       JOIN "Pedido" p ON p.id = c.recovery_id
       WHERE p.data_pedido >= ${desde} AND p.data_pedido <= ${ate}
-      GROUP BY p.recuperacao, c.status`,
+      GROUP BY 1, c.status`,
   ]);
 
   const soma = (cond: (l: Linha) => boolean) => principais.filter(cond).reduce((a, l) => a + l.n, 0);
