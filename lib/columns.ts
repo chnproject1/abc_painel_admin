@@ -63,7 +63,7 @@ export function selectPorRole(role: string) {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Operação Estados Unidos (model PedidoUs)
+   Operação ES (LATAM, espanhol) (model PedidoEs)
    Sem telefone e sem campos fiscais brasileiros.
    Três slots de música: 1 = venda inicial, 2 e 3 = upsell 2.
    ────────────────────────────────────────────────────────────── */

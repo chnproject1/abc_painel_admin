@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
 
   const role = (session.user as any).role ?? "OPERADOR";
 
-  // A operação US não coleta telefone, então a busca é por email ou pelo ID do pedido
-  const pedidos = await prisma.pedidoUs.findMany({
+  // A operação ES (LATAM) não coleta telefone, então a busca é por email ou pelo ID do pedido
+  const pedidos = await prisma.pedidoEs.findMany({
     where: {
       OR: [
         { email: { contains: q, mode: "insensitive" } },

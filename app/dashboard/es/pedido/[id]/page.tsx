@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 
-interface PedidoUs {
+interface PedidoEs {
   id: string;
   nome: string;
   email: string;
@@ -67,12 +67,12 @@ const STATUS_COR: Record<string, string> = {
 const usd = (v?: string | null) =>
   v == null ? null : Number(v).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-export default function PedidoUsPage() {
+export default function PedidoEsPage() {
   const { id } = useParams();
   const { data: session } = useSession();
   const router = useRouter();
 
-  const [pedido, setPedido] = useState<PedidoUs | null>(null);
+  const [pedido, setPedido] = useState<PedidoEs | null>(null);
   const [naoEncontrado, setNaoEncontrado] = useState(false);
 
   const [letra, setLetra]   = useState("");
@@ -93,7 +93,7 @@ export default function PedidoUsPage() {
   }
 
   useEffect(() => {
-    fetch(`/api/us/pedido/${id}`)
+    fetch(`/api/es/pedido/${id}`)
       .then(async (r) => {
         if (r.status === 404) { setNaoEncontrado(true); return null; }
         return r.json();
@@ -112,7 +112,7 @@ export default function PedidoUsPage() {
   async function salvarLetra() {
     setSalvando(true);
     try {
-      const res = await fetch(`/api/us/pedido/${id}`, {
+      const res = await fetch(`/api/es/pedido/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ letra, estilo }),
@@ -128,12 +128,12 @@ export default function PedidoUsPage() {
     }
   }
 
-  // Dispara os fluxos n8n da operação US
+  // Dispara os fluxos n8n da operação ES (LATAM)
   async function acionar(tipo: string, alvo?: string) {
     const chave = alvo ? tipo + ":" + alvo : tipo;
     setAcionando(chave);
     try {
-      const res = await fetch("/api/us/trigger/" + id, {
+      const res = await fetch("/api/es/trigger/" + id, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo, ...(alvo ? { alvo } : {}) }),
@@ -152,8 +152,8 @@ export default function PedidoUsPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gray-50">
         <p className="text-gray-500">Pedido não encontrado.</p>
-        <button onClick={() => router.push("/dashboard/us")} className="text-sm text-avocado-600 hover:text-avocado-700 font-medium">
-          ← Voltar ao dashboard US
+        <button onClick={() => router.push("/dashboard/es")} className="text-sm text-avocado-600 hover:text-avocado-700 font-medium">
+          ← Voltar ao dashboard ES
         </button>
       </div>
     );
@@ -192,12 +192,12 @@ export default function PedidoUsPage() {
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-800 font-medium shrink-0">
           ← Voltar
         </button>
-        <button onClick={() => router.push("/dashboard/us")} className="text-sm text-gray-500 hover:text-gray-800 font-medium shrink-0">
+        <button onClick={() => router.push("/dashboard/es")} className="text-sm text-gray-500 hover:text-gray-800 font-medium shrink-0">
           ⌂ Início
         </button>
         <div className="flex-1 min-w-0 flex items-center gap-3">
           <h1 className="text-base font-bold text-gray-900 truncate">{pedido.nome}</h1>
-          <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 shrink-0">🇺🇸 US</span>
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 shrink-0">{pedido.pais === "US" ? "🇺🇸 US" : "🌎 LATAM"}</span>
           <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_COR[pedido.status] ?? "bg-gray-100 text-gray-600"}`}>
             {pedido.status}
           </span>
@@ -281,14 +281,14 @@ export default function PedidoUsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Idioma" valor={pedido.idioma} />
                 {pedido.data_entrega && (
-                  <Campo label="Entrega principal" valor={new Date(pedido.data_entrega).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
+                  <Campo label="Entrega principal" valor={new Date(pedido.data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
                 )}
               </div>
               {temExtras && pedido.up_data_entrega && (
-                <Campo label="Entrega das extras" valor={new Date(pedido.up_data_entrega).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
+                <Campo label="Entrega das extras" valor={new Date(pedido.up_data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
               )}
               {pedido.data_pedido && (
-                <Campo label="Data do pedido" valor={new Date(pedido.data_pedido).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })} />
+                <Campo label="Data do pedido" valor={new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
               )}
               <Campo label="ID do pedido" valor={pedido.id} mono />
               <Campo label="Erro no upsell" valor={pedido.upsell_erro} />
@@ -435,7 +435,7 @@ function Entrega({
         {estado.texto}
         {entregue && quando && (
           <span className="text-xs font-normal text-gray-400 ml-2">
-            {new Date(quando).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
+            {new Date(quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
           </span>
         )}
       </span>

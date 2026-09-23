@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Callbacks das automações da operação US (model PedidoUs).
+ * Callbacks das automações da operação ES (LATAM) (model PedidoEs).
  *
  * Mesmos nomes de ação do /api/n8n do BR, para os nós do n8n serem portados
  * trocando só a URL. As ações com prefixo `up_` são do segundo fluxo, que gera
  * as duas músicas extras do upsell 2.
  *
- * Proteção: aceita US_N8N_SECRET e, se ela não existir, US_CHECKOUT_SECRET —
+ * Proteção: aceita ES_N8N_SECRET e, se ela não existir, ES_CHECKOUT_SECRET (os nomes US_* antigos ainda valem) —
  * assim funciona sem criar uma variável nova. O header pode ser
  * `x-callback-secret` (igual ao BR) ou `x-checkout-secret`.
  *
@@ -26,7 +26,7 @@ const ACOES = [
 ];
 
 function autorizado(req: NextRequest): boolean {
-  const secret = process.env.US_N8N_SECRET || process.env.US_CHECKOUT_SECRET;
+  const secret = process.env.ES_N8N_SECRET || process.env.ES_CHECKOUT_SECRET || process.env.US_N8N_SECRET || process.env.US_CHECKOUT_SECRET;
   if (!secret) return true; // sem segredo configurado, rota aberta
   const token =
     req.headers.get("x-callback-secret") ??
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const pedido = await prisma.pedidoUs.update({
+    const pedido = await prisma.pedidoEs.update({
       where: { id },
       data: update,
       select: {
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
     if (e?.code === "P2025") {
       // Sintoma clássico de ter apontado o nó para a operação errada
       return NextResponse.json(
-        { success: false, error: `Pedido ${id} não encontrado em PedidoUs (operação US)` },
+        { success: false, error: `Pedido ${id} não encontrado em PedidoEs (operação ES (LATAM))` },
         { status: 404 },
       );
     }

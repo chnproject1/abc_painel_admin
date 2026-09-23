@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Entrada de pedidos da operação US (model PedidoUs).
+ * Entrada de pedidos da operação ES (LATAM) (model PedidoEs).
  *
  * O checkout chama esta rota uma vez por etapa do funil, sempre com o mesmo
  * `id` do Stripe. Todas as escritas são absolutas (nunca incrementam), então
@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
  * Funil: venda inicial -> up1 (página Premium) -> up2 (2 músicas extras)
  *        -> ds (página Premium, só ofertado se up1 e up2 forem recusados)
  *
- * Proteção: se US_CHECKOUT_SECRET estiver definida no ambiente, exige o header
+ * Proteção: se ES_CHECKOUT_SECRET (ou a antiga US_CHECKOUT_SECRET) estiver definida no ambiente, exige o header
  * `x-checkout-secret`. Sem a variável a rota fica aberta — mesmo padrão do
  * /api/n8n, para permitir configurar depois sem quebrar quem já chama.
  */
@@ -28,9 +28,9 @@ const ACOES = [
 ];
 
 /**
- * Nomes que o funil (Netlify) manda -> colunas do model PedidoUs.
+ * Nomes que o funil (Netlify) manda -> colunas do model PedidoEs.
  * Ver CONTRATO-PAINEL.md do repositório do funil.
- * `phone`, `cpf` e `currency` chegam mas são ignorados: os EUA não coletam
+ * `phone`, `cpf` e `currency` chegam mas são ignorados: a operação ES não coleta
  * telefone nem documento, e a moeda é sempre USD nesta tabela.
  */
 const MAPA_FUNIL: Record<string, string> = {
@@ -128,7 +128,7 @@ function erro(msg: string, status = 500) {
 }
 
 function autorizado(req: NextRequest): boolean {
-  const secret = process.env.US_CHECKOUT_SECRET;
+  const secret = process.env.ES_CHECKOUT_SECRET || process.env.US_CHECKOUT_SECRET;   // US_ aceito até a troca no Easypanel
   if (!secret) return true; // sem segredo configurado, rota aberta
   const token =
     req.headers.get("x-checkout-secret") ?? req.nextUrl.searchParams.get("secret");
@@ -137,9 +137,9 @@ function autorizado(req: NextRequest): boolean {
 
 // Aviso devolvido no corpo enquanto a rota estiver sem segredo configurado
 function avisoSeguranca() {
-  return process.env.US_CHECKOUT_SECRET
+  return (process.env.ES_CHECKOUT_SECRET || process.env.US_CHECKOUT_SECRET)
     ? undefined
-    : "US_CHECKOUT_SECRET não configurada — rota aberta a qualquer chamador";
+    : "ES_CHECKOUT_SECRET não configurada — rota aberta a qualquer chamador";
 }
 
 /** Extrai o tier (basic|silver) de um plano já montado, ex: "basic_up1_up2" */
@@ -178,7 +178,7 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return erro("id obrigatório", 400);
 
-  const p = await prisma.pedidoUs.findUnique({ where: { id } });
+  const p = await prisma.pedidoEs.findUnique({ where: { id } });
   if (!p) return NextResponse.json({ data: {} });
 
   // O n8n usa isto para decidir se entrega o link da página Premium
@@ -298,7 +298,9 @@ export async function POST(req: NextRequest) {
       email:        data.mail        || data.email || "",
       nomefiscal:   data.nomefiscal  || null,
       zip_code:     data.zip_code    || null,
-      idioma:       data.idioma      || "en",
+      idioma:       data.idioma      || "es",
+      // O checkout novo pode ou não mandar o país; sem ele fica LATAM (venda pra toda a região)
+      pais:         data.pais        || "LATAM",
       estilo:       data.estilo      || null,
       letra:        data.letra       || null,
       utm_source:   data.utm_source  || null,
@@ -315,7 +317,7 @@ export async function POST(req: NextRequest) {
       recovery_id:  data.recovery_id || null,
     };
 
-    const pedido = await prisma.pedidoUs.upsert({
+    const pedido = await prisma.pedidoEs.upsert({
       where: { id: data.id },
       create: {
         id:          data.id,
@@ -340,7 +342,7 @@ export async function POST(req: NextRequest) {
     return erro(`action desconhecida: ${data.action}. Válidas: ${ACOES.join(", ")}`, 400);
   }
 
-  const atual = await prisma.pedidoUs.findUnique({
+  const atual = await prisma.pedidoEs.findUnique({
     where: { id: data.id },
     select: {
       plano: true, status: true,
@@ -369,7 +371,7 @@ export async function POST(req: NextRequest) {
         if (n !== undefined) merge.valor = n;
         continue;
       }
-      // O funil manda estes por compatibilidade com o BR, mas os EUA não usam
+      // O funil manda estes por compatibilidade com o BR, mas a operação ES não usa
       if (chave === "phone" || chave === "cpf" || chave === "currency") continue;
 
       const coluna = MAPA_FUNIL[chave];
@@ -390,7 +392,7 @@ export async function POST(req: NextRequest) {
       upsell_erro:   merge.upsell_erro   ?? atual.upsell_erro,
     }));
 
-    const pedido = await prisma.pedidoUs.update({
+    const pedido = await prisma.pedidoEs.update({
       where: { id: data.id },
       data: merge,
       select: {
@@ -474,7 +476,7 @@ export async function POST(req: NextRequest) {
   // O plano acompanha os status das ofertas
   update.plano = montarPlano(tier, up1_status, up2_status, ds_status);
 
-  const pedido = await prisma.pedidoUs.update({
+  const pedido = await prisma.pedidoEs.update({
     where: { id: data.id },
     data: update,
     select: {

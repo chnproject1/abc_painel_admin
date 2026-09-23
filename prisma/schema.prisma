@@ -138,7 +138,7 @@ model PedidoVideo {
 // Sem telefone/WhatsApp (contato só por email) e sem campos fiscais brasileiros.
 // Funil: venda inicial -> up1 (página Premium) -> up2 (2 músicas extras)
 //        -> ds (página Premium, só aparece se up1 e up2 forem recusados)
-model PedidoUs {
+model PedidoEs {
   id            String    @id                  // ID da cobrança no Stripe (o mesmo durante toda a compra)
 
   nome          String
@@ -146,9 +146,9 @@ model PedidoUs {
   nomefiscal    String?                        // nome fiscal informado no funil
   comprador     String?                        // nome impresso no cartão (Stripe)
   zip_code      String?                        // CEP de cobrança (Stripe / AVS)
-  pais          String?   @default("US")
+  pais          String?   @default("LATAM")   // LATAM: a venda é pra todo país de língua espanhola; US = pedidos antigos
   plano         String    @default("")         // basic | basic_up1 | basic_up2 | basic_up1_up2 | basic_ds (idem silver)
-  idioma        String    @default("en")
+  idioma        String    @default("es")
 
   // Status por oferta — pendente | pago | recusado
   status        String    @default("pendente") // venda inicial

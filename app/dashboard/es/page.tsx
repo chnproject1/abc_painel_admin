@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import SeletorPais from "@/components/SeletorPais";
 
-interface PedidoUs {
+interface PedidoEs {
   id: string;
   nome: string;
   email: string;
@@ -72,7 +72,7 @@ function StatCard({
       }`}
     >
       <p className="text-xs font-medium uppercase tracking-wide opacity-70 leading-tight">{label}</p>
-      <p className="text-3xl font-bold tabular-nums">{value.toLocaleString("en-US")}</p>
+      <p className="text-3xl font-bold tabular-nums">{value.toLocaleString("pt-BR")}</p>
       <p className="text-xs opacity-50 mt-1">ver lista →</p>
     </button>
   );
@@ -88,7 +88,7 @@ function Oferta({ label, status }: { label: string; status?: string | null }) {
   return <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${cor}`}>{label}</span>;
 }
 
-function PedidoCard({ p }: { p: PedidoUs }) {
+function PedidoCard({ p }: { p: PedidoEs }) {
   const gerada        = p.gerou_musica || !!p.link_audio || !!p.link_pagina;
   const alertaPago    = p.status === "pago" && !gerada;
   const naoEntregue   = gerada && !p.entrega_email;
@@ -103,7 +103,7 @@ function PedidoCard({ p }: { p: PedidoUs }) {
 
   return (
     <Link
-      href={`/dashboard/us/pedido/${p.id}`}
+      href={`/dashboard/es/pedido/${p.id}`}
       className={`block rounded-xl border p-4 sm:p-5 hover:shadow-sm transition-all ${cardClass}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -114,7 +114,7 @@ function PedidoCard({ p }: { p: PedidoUs }) {
             {p.plano && <span className="font-mono text-xs">{p.plano}</span>}
             {p.estilo && <span> · {p.estilo}</span>}
             {p.data_pedido && (
-              <span> · {new Date(p.data_pedido).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}</span>
+              <span> · {new Date(p.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
             )}
           </p>
           <div className="flex flex-wrap gap-1 mt-2">
@@ -148,7 +148,7 @@ function DashboardUsContent() {
 
   // Busca
   const [busca, setBusca]           = useState(searchParams.get("q") ?? "");
-  const [resultados, setResultados] = useState<PedidoUs[]>([]);
+  const [resultados, setResultados] = useState<PedidoEs[]>([]);
   const [carregandoBusca, setCarregandoBusca] = useState(false);
   const [erroBusca, setErroBusca]   = useState("");
   const [buscaFeita, setBuscaFeita] = useState(false);
@@ -163,7 +163,7 @@ function DashboardUsContent() {
   const [filtroAte, setFiltroAte]     = useState(searchParams.get("ate") ?? "");
   const [filtroPlano, setFiltroPlano] = useState(searchParams.get("plano") ?? "");
   const [planos, setPlanos]           = useState<string[]>([]);
-  const [pedidosFiltro, setPedidosFiltro] = useState<PedidoUs[]>([]);
+  const [pedidosFiltro, setPedidosFiltro] = useState<PedidoEs[]>([]);
   const [paginaAtual, setPaginaAtual]     = useState(parseInt(searchParams.get("page") ?? "1"));
   const [totalPaginas, setTotalPaginas]   = useState(1);
   const [totalFiltro, setTotalFiltro]     = useState(0);
@@ -185,14 +185,14 @@ function DashboardUsContent() {
     if (desde) params.set("desde", desde);
     if (ate)   params.set("ate", ate);
     if (plano) params.set("plano", plano);
-    router.replace(`/dashboard/us?${params.toString()}`);
+    router.replace(`/dashboard/es?${params.toString()}`);
     try {
       const apiParams = new URLSearchParams({ filtro, page: String(pagina) });
       if (data)  apiParams.set("data", data);
       if (desde) apiParams.set("desde", `${desde}:00-04:00`);
       if (ate)   apiParams.set("ate", `${ate}:00-04:00`);
       if (plano) apiParams.set("plano", plano);
-      const res  = await fetch(`/api/us/pedidos?${apiParams.toString()}`);
+      const res  = await fetch(`/api/es/pedidos?${apiParams.toString()}`);
       const json = await res.json();
       setPedidosFiltro(json.pedidos ?? []);
       setTotalPaginas(json.pages ?? 1);
@@ -210,7 +210,7 @@ function DashboardUsContent() {
     setResultados([]);
     setBuscaFeita(false);
     try {
-      const res  = await fetch(`/api/us/search?${new URLSearchParams({ q })}`);
+      const res  = await fetch(`/api/es/search?${new URLSearchParams({ q })}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro na busca");
       setResultados(data);
@@ -237,15 +237,15 @@ function DashboardUsContent() {
   // Stats e planos apenas quando a sessão confirmar admin
   useEffect(() => {
     if (isAdmin) {
-      fetch("/api/us/stats").then(r => r.json()).then(setStats).catch(() => {});
-      fetch("/api/us/planos").then(r => r.json()).then(setPlanos).catch(() => {});
+      fetch("/api/es/stats").then(r => r.json()).then(setStats).catch(() => {});
+      fetch("/api/es/planos").then(r => r.json()).then(setPlanos).catch(() => {});
     }
   }, [isAdmin]);
 
   function handleCardClick(filtro: string) {
     if (filtroAtivo === filtro && !filtroData && !filtroDesde && !filtroAte && !filtroPlano) {
       setFiltroAtivo(null);
-      router.replace("/dashboard/us");
+      router.replace("/dashboard/es");
     } else {
       carregarFiltro(filtro, 1, filtroData, filtroDesde, filtroAte, filtroPlano);
     }
@@ -265,7 +265,7 @@ function DashboardUsContent() {
       carregarFiltro(filtroAtivo ?? "todos", 1, "", "", "", filtroPlano);
     } else {
       setFiltroData(""); setFiltroDesde(""); setFiltroAte("");
-      router.replace("/dashboard/us");
+      router.replace("/dashboard/es");
     }
   }
   function handlePlanoClick(plano: string) {
@@ -276,7 +276,7 @@ function DashboardUsContent() {
   async function handleBuscar(e: React.FormEvent) {
     e.preventDefault();
     if (!busca.trim()) return;
-    router.replace(`/dashboard/us?q=${encodeURIComponent(busca.trim())}`);
+    router.replace(`/dashboard/es?q=${encodeURIComponent(busca.trim())}`);
     executarBusca(busca.trim());
   }
 
@@ -356,7 +356,7 @@ function DashboardUsContent() {
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{resultados.length} pedido(s) encontrado(s)</p>
               <button
-                onClick={() => { setBuscaFeita(false); setBusca(""); router.replace("/dashboard/us"); }}
+                onClick={() => { setBuscaFeita(false); setBusca(""); router.replace("/dashboard/es"); }}
                 className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50"
               >
                 ✕ limpar busca
@@ -438,14 +438,14 @@ function DashboardUsContent() {
                 </p>
                 {!carregandoFiltro && (
                   <p className="text-xs text-gray-500">
-                    {totalFiltro.toLocaleString("en-US")} pedido(s) · página {paginaAtual} de {totalPaginas}
+                    {totalFiltro.toLocaleString("pt-BR")} pedido(s) · página {paginaAtual} de {totalPaginas}
                   </p>
                 )}
               </div>
               <button
                 onClick={() => {
                   setFiltroAtivo(null); setFiltroData(""); setFiltroDesde(""); setFiltroAte(""); setFiltroPlano("");
-                  router.replace("/dashboard/us");
+                  router.replace("/dashboard/es");
                 }}
                 className="text-xs text-gray-400 hover:text-gray-600"
               >

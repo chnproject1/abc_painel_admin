@@ -4,12 +4,12 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Aciona os fluxos n8n da operação US a partir do painel.
+ * Aciona os fluxos n8n da operação ES (LATAM) a partir do painel.
  *
- *   POST /api/us/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio", "alvo"?: ... }
+ *   POST /api/es/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio", "alvo"?: ... }
  *
  * Uma rota só, com o fluxo escolhido pelo `tipo`, porque as três fazem a mesma
- * coisa: confere que o pedido existe em PedidoUs e repassa o id ao webhook.
+ * coisa: confere que o pedido existe em PedidoEs e repassa o id ao webhook.
  *
  * Se a variável de ambiente do fluxo não existir, devolve "Webhook não
  * configurado" em vez de quebrar — mesmo comportamento do /api/trigger do BR.
@@ -23,17 +23,17 @@ import { prisma } from "@/lib/prisma";
 const FLUXOS = {
   // Gera a música principal (venda inicial)
   principal: {
-    env: "US_N8N_WEBHOOK_URL",
+    env: "ES_N8N_WEBHOOK_URL",
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "principal" }),
   },
   // Gera as duas músicas extras (upsell 2 ou downsell/combo)
   upsell: {
-    env: "US_N8N_UPSELL_WEBHOOK_URL",
+    env: "ES_N8N_UPSELL_WEBHOOK_URL",
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "upsell" }),
   },
   // Reenvia tudo o que já foi gerado, sem passar pela Suno
   envio: {
-    env: "US_N8N_ENVIO_WEBHOOK_URL",
+    env: "ES_N8N_ENVIO_WEBHOOK_URL",
     corpo: (id: string) => ({ payment_id: id, pedido_id: id, tipo: "envio" }),
   },
 } as const;
@@ -61,14 +61,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  const pedido = await prisma.pedidoUs.findUnique({
+  const pedido = await prisma.pedidoEs.findUnique({
     where: { id },
     select: { id: true, up2_status: true, ds_status: true },
   });
 
   if (!pedido) {
     return NextResponse.json(
-      { error: `Pedido ${id} não encontrado em PedidoUs (operação US)` },
+      { error: `Pedido ${id} não encontrado em PedidoEs (operação ES (LATAM))` },
       { status: 404 },
     );
   }
@@ -82,7 +82,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const fluxo = FLUXOS[tipo];
-  const webhookUrl = process.env[fluxo.env];
+  // ES_* é o nome novo; o US_* antigo continua valendo até a troca no Easypanel
+  const webhookUrl = process.env[fluxo.env] || process.env[fluxo.env.replace(/^ES_/, "US_")];
   if (!webhookUrl) {
     return NextResponse.json(
       { error: `Webhook não configurado (falta a variável ${fluxo.env})` },

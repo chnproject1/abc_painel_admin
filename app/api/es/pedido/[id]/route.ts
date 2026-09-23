@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const role = (session.user as any).role ?? "OPERADOR";
 
-  const pedido = await prisma.pedidoUs.findUnique({
+  const pedido = await prisma.pedidoEs.findUnique({
     where: { id },
     select: selectPorRoleUs(role),
   });
@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   try {
-    const pedido = await prisma.pedidoUs.update({ where: { id }, data: update });
+    const pedido = await prisma.pedidoEs.update({ where: { id }, data: update });
     return NextResponse.json(pedido);
   } catch (e: any) {
     if (e?.code === "P2025") {

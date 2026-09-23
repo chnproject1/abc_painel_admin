@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// A operação US nasce junto com o portal, então não existe corte de data
+// A operação ES (LATAM) nasce junto com o portal, então não existe corte de data
 // como o INICIO_AUTOMACAO da operação BR.
 /* Uma entrega pendente é qualquer coisa que o cliente comprou e ainda não
  * recebeu: a música principal, ou as extras do upsell 2 / downsell. */
@@ -46,29 +46,29 @@ export async function GET() {
     recDs,
   ] = await Promise.all([
     // Iniciaram o checkout
-    prisma.pedidoUs.count(),
+    prisma.pedidoEs.count(),
 
     // Pagaram a venda inicial
-    prisma.pedidoUs.count({ where: { status: "pago" } }),
+    prisma.pedidoEs.count({ where: { status: "pago" } }),
 
     // Aceitaram cada oferta do funil
-    prisma.pedidoUs.count({ where: { up1_status: "pago" } }),
-    prisma.pedidoUs.count({ where: { up2_status: "pago" } }),
-    prisma.pedidoUs.count({ where: { ds_status: "pago" } }),
+    prisma.pedidoEs.count({ where: { up1_status: "pago" } }),
+    prisma.pedidoEs.count({ where: { up2_status: "pago" } }),
+    prisma.pedidoEs.count({ where: { ds_status: "pago" } }),
 
     // Falta alguma entrega — principal ou extras
-    prisma.pedidoUs.count({ where: PENDENTE }),
+    prisma.pedidoEs.count({ where: PENDENTE }),
 
     // Alguma geração falhou — principal ou extras
-    prisma.pedidoUs.count({ where: ERRO }),
+    prisma.pedidoEs.count({ where: ERRO }),
 
     // Entrega do upsell 2: comprou as músicas extras e ainda não recebeu
-    prisma.pedidoUs.count({
+    prisma.pedidoEs.count({
       where: { OR: [{ up2_status: "pago" }, { ds_status: "pago" }], up_entrega_email: false },
     }),
 
     // Entrega do upsell 2: comprou, músicas não geradas e ainda não entregues
-    prisma.pedidoUs.count({
+    prisma.pedidoEs.count({
       where: {
         OR: [{ up2_status: "pago" }, { ds_status: "pago" }],
         up_gerou_musica: false,
@@ -80,10 +80,10 @@ export async function GET() {
        paga: o `valor` é gravado na criação do pedido, então somar sem
        filtro faria carrinho abandonado aparecer como receita. Por isso são
        quatro consultas e não um aggregate só — os status são diferentes. */
-    prisma.pedidoUs.aggregate({ where: { status: "pago" },     _sum: { valor: true } }),
-    prisma.pedidoUs.aggregate({ where: { up1_status: "pago" }, _sum: { up1_valor: true } }),
-    prisma.pedidoUs.aggregate({ where: { up2_status: "pago" }, _sum: { up2_valor: true } }),
-    prisma.pedidoUs.aggregate({ where: { ds_status: "pago" },  _sum: { ds_valor: true } }),
+    prisma.pedidoEs.aggregate({ where: { status: "pago" },     _sum: { valor: true } }),
+    prisma.pedidoEs.aggregate({ where: { up1_status: "pago" }, _sum: { up1_valor: true } }),
+    prisma.pedidoEs.aggregate({ where: { up2_status: "pago" }, _sum: { up2_valor: true } }),
+    prisma.pedidoEs.aggregate({ where: { ds_status: "pago" },  _sum: { ds_valor: true } }),
   ]);
 
   const soma = (v: unknown) => Number(v ?? 0);

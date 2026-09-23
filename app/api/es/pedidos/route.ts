@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (dataParam) {
-    // Dia interpretado no fuso de Nova York (operação US)
+    // Dia interpretado no fuso de Nova York (operação ES (LATAM))
     where.data_pedido = {
       gte: new Date(`${dataParam}T00:00:00-04:00`),
       lte: new Date(`${dataParam}T23:59:59.999-04:00`),
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
   }
 
   const [pedidos, total] = await Promise.all([
-    prisma.pedidoUs.findMany({
+    prisma.pedidoEs.findMany({
       where,
       select: {
         id: true,
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       skip: (page - 1) * LIMIT,
       take: LIMIT,
     }),
-    prisma.pedidoUs.count({ where }),
+    prisma.pedidoEs.count({ where }),
   ]);
 
   return NextResponse.json({ pedidos, total, page, pages: Math.ceil(total / LIMIT) });

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 // então o seletor navega entre seções em vez de filtrar uma lista única.
 export default function SeletorPais() {
   const pathname = usePathname();
-  const noUs = pathname?.startsWith("/dashboard/us");
+  const noEs = pathname?.startsWith("/dashboard/es");
 
   const base = "px-3 py-1.5 text-sm font-medium transition-colors";
   const ativo = "bg-gray-800 text-white";
@@ -14,11 +14,11 @@ export default function SeletorPais() {
 
   return (
     <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden shrink-0">
-      <Link href="/dashboard" className={`${base} ${noUs ? inativo : ativo}`}>
+      <Link href="/dashboard" className={`${base} ${noEs ? inativo : ativo}`}>
         🇧🇷 BR
       </Link>
-      <Link href="/dashboard/us" className={`${base} border-l border-gray-200 ${noUs ? ativo : inativo}`}>
-        🇺🇸 US
+      <Link href="/dashboard/es" className={`${base} border-l border-gray-200 ${noEs ? ativo : inativo}`}>
+        🌎 ES
       </Link>
     </div>
   );
