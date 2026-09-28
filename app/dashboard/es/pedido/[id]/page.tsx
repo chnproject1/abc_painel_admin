@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
+import { liberacoes, dsTipoDe, DS_ROTULO } from "@/lib/es-ofertas";
+import { PRODUCAO_LABEL, VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 interface PedidoEs {
   id: string;
@@ -53,6 +55,17 @@ interface PedidoEs {
   up1_valor?: string;
   up2_valor?: string;
   ds_valor?: string;
+
+  rastreado?: boolean;   // só vem pro admin
+
+  // Vídeo (upsell 2 / downsell com vídeo): só existe em pedido novo (LATAM)
+  video?: {
+    producao: string; entrega_email: boolean; erro_msg?: string | null; fotos_qtd: number; tentativas: number;
+    rastreado?: boolean;
+    aberto_em?: string | null; fotos_em?: string | null; concluido_em?: string | null; entregue_em?: string | null;
+    atualizado_em?: string | null; criado_em?: string | null;
+    link: string; ver_link: string; video_url?: string | null;
+  } | null;
 }
 
 interface Toast { tipo: "ok" | "erro"; texto: string }
@@ -168,15 +181,20 @@ export default function PedidoEsPage() {
   }
 
   const musicaGerada = pedido.gerou_musica || !!pedido.link_audio || !!pedido.link_pagina;
-  // As páginas Premium são sempre geradas pela automação. O upsell 1 e o downsell
-  // decidem apenas se o link é entregue ao cliente no envio final.
-  const entregaPagina = pedido.up1_status === "pago" || pedido.ds_status === "pago";
-  // O combo (downsell) entrega pagina + as duas musicas, igual ao upsell 2
-  const temExtras = pedido.up2_status === "pago" || pedido.ds_status === "pago";
+  /* O que o cliente tem direito: regra em lib/es-ofertas.ts. As páginas Premium
+     são sempre geradas; a oferta só decide se o link vai no e-mail. */
+  const lib = liberacoes(pedido);
+  const entregaPagina = lib.pagina;
+  // Pedido novo (LATAM): up2 = vídeo, com linha em PedidoVideoEs.
+  // Pedido antigo (EUA): up2 = músicas extras, sem linha de vídeo.
+  const temVideo  = !!pedido.video;
+  const temExtras = !temVideo && (pedido.up2_status === "pago" || pedido.ds_status === "pago");
+  const dsTipo = pedido.ds_status === "pago" ? dsTipoDe(pedido) : null;
   // Nenhuma oferta do funil pode ser paga sem a venda inicial ter sido paga:
   // se isso acontece, o checkout registrou o upsell mas não a confirmação.
-  const ofertaPaga = entregaPagina || temExtras;
+  const ofertaPaga = entregaPagina || lib.video || temExtras;
   const vendaInconsistente = ofertaPaga && pedido.status !== "pago";
+  const estadoVideoEs = temVideo ? estadoDoVideo(pedido.video!) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -212,9 +230,15 @@ export default function PedidoEsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)} />
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} />
-            <OfertaBox titulo="Upsell 2"      descricao="Músicas 2 e 3"   status={pedido.up2_status} valor={usd(pedido.up2_valor)} />
-            <OfertaBox titulo="Downsell"      descricao="Página + músicas" status={pedido.ds_status}  valor={usd(pedido.ds_valor)} />
+            <OfertaBox titulo="Upsell 2"      descricao={temExtras ? "Músicas 2 e 3" : "Vídeo com fotos"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} />
+            <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} />
           </div>
+          {/* Rastreio da venda da frente — diagnóstico de operação, só admin (igual ao BR) */}
+          {isAdmin && pedido.status === "pago" && (
+            <p className={`text-xs font-medium mt-4 ${pedido.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+              {pedido.rastreado ? "✓ Venda da frente registrada na UTMify" : "Venda da frente ainda não registrada na UTMify (sem rastreio)"}
+            </p>
+          )}
         </section>
 
         {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não
@@ -243,15 +267,90 @@ export default function PedidoEsPage() {
               entregue={pedido.pagina_entrega_email}
               quando={pedido.pagina_data_entrega}
             />
-            <Entrega
-              label="Músicas 2 e 3 — upsell 2 / downsell"
-              comprado={temExtras}
-              gerado={pedido.up_gerou_musica}
-              entregue={pedido.up_entrega_email}
-              quando={pedido.up_data_entrega}
-            />
+            {temExtras && (
+              <Entrega
+                label="Músicas 2 e 3 — upsell 2 / downsell (pedido antigo)"
+                comprado={temExtras}
+                gerado={pedido.up_gerou_musica}
+                entregue={pedido.up_entrega_email}
+                quando={pedido.up_data_entrega}
+              />
+            )}
+            {!temExtras && (
+              <Entrega
+                label="Vídeo com fotos — upsell 2 / downsell"
+                comprado={lib.video}
+                gerado={!!pedido.video?.video_url}
+                entregue={!!pedido.video?.entrega_email}
+                quando={pedido.video?.entregue_em}
+              />
+            )}
           </div>
         </section>
+
+        {/* Vídeo (upsell 2 / ds2 / ds3) — mesmo desenho do bloco do BR
+            (app/dashboard/pedido/[id]); a entrega aqui é por e-mail. */}
+        {temVideo && estadoVideoEs && (() => {
+          const v = pedido.video!; const e = estadoVideoEs;
+          const dt = (d?: string | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
+          // Qual venda liberou o vídeo: o upsell 2, ou o downsell (ds2 = só o vídeo, ds3 = página + vídeo)
+          const venda = pedido.up2_status === "pago"
+            ? `Pago · ${usd(pedido.up2_valor) ?? "—"} (upsell 2)`
+            : pedido.ds_status === "pago"
+              ? `Pago · ${usd(pedido.ds_valor) ?? "—"} (${dsTipo ?? "downsell"})`
+              : "Não pagou";
+          return (
+            <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo (upsell)</h2>
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
+              </div>
+              <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <Campo label="Venda" valor={venda} />
+                <Campo label="Produção" valor={PRODUCAO_LABEL[v.producao] ?? v.producao} />
+                <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
+                <Campo label="Entrega e-mail" valor={v.entrega_email ? "✓ Enviado" : "✕ Não enviado"} />
+              </div>
+              {/* Rastreio e linha do tempo são diagnóstico de operação: ficam só
+                  para o admin, igual ao BR. */}
+              {isAdmin && (
+                <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+                  {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
+                </p>
+              )}
+              {isAdmin && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <Campo label="Pago em" valor={dt(v.criado_em) ?? "—"} />
+                  <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
+                  <Campo label="Fotos em" valor={dt(v.fotos_em) ?? "—"} />
+                  <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {e.chave === "erro" && (
+                  <button onClick={() => acionar("video")} disabled={!!acionando}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
+                    {acionando === "video" ? "Enviando..." : "🔄 Mandar pra produção de novo"}
+                  </button>
+                )}
+                {v.video_url && (
+                  <a href={`/api/download?url=${encodeURIComponent(v.video_url)}&filename=${encodeURIComponent(`video-${pedido.nome || "cliente"}.mp4`)}`}
+                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-avocado-600 hover:bg-avocado-700 text-white text-sm font-medium transition-colors">
+                    ⬇️ Baixar vídeo
+                  </a>
+                )}
+                {v.video_url && <LinkBtn href={v.ver_link} label="▶️ Ver vídeo" />}
+                <LinkBtn href={v.link} label="🔗 Página de fotos" />
+              </div>
+              {e.chave === "pendente_envio" && (
+                <p className="text-xs text-yellow-800 mt-3">Vídeo pronto e o e-mail não saiu. Use "Enviar ao cliente" ou mande o link da página do vídeo para <span className="font-mono">{pedido.email?.split("?")[0]}</span>.</p>
+              )}
+            </section>
+          );
+        })()}
 
         {/* Cliente + Pedido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -384,15 +483,25 @@ export default function PedidoEsPage() {
             onClick={() => acionar("principal")}
           />
 
-          <Acao
-            titulo="Gerar músicas extras"
-            descricao={temExtras
-              ? "Reenvia para produção e atualiza as músicas 2 e 3 do upsell 2 ou do downsell."
-              : "Indisponível — este cliente não comprou o upsell 2 nem o downsell."}
-            rotulo={acionando === "upsell" ? "Gerando..." : "Gerar e enviar"}
-            disabled={!!acionando || !temExtras}
-            onClick={() => acionar("upsell")}
-          />
+          {temExtras ? (
+            <Acao
+              titulo="Gerar músicas extras"
+              descricao="Pedido antigo: reenvia para produção e atualiza as músicas 2 e 3."
+              rotulo={acionando === "upsell" ? "Gerando..." : "Gerar e enviar"}
+              disabled={!!acionando}
+              onClick={() => acionar("upsell")}
+            />
+          ) : (
+            <Acao
+              titulo="Refazer o vídeo"
+              descricao={temVideo
+                ? (pedido.video!.producao === "aguardando_fotos" ? "Indisponível — o cliente ainda não enviou as fotos." : "Renderiza de novo com as fotos já enviadas e reenvia o e-mail.")
+                : "Indisponível — este cliente não comprou o vídeo."}
+              rotulo={acionando === "video" ? "Gerando..." : "Refazer e enviar"}
+              disabled={!!acionando || !temVideo || pedido.video!.producao === "aguardando_fotos"}
+              onClick={() => acionar("video")}
+            />
+          )}
         </section>
 
       </main>
@@ -401,6 +510,25 @@ export default function PedidoEsPage() {
 }
 
 /* ── Sub-componentes ── */
+
+/* Estado do vídeo ES, mesma leitura do BR (lib/video-estado.ts) sem a parte da venda:
+   aqui todo vídeo já está pago. */
+function estadoDoVideo(v: NonNullable<PedidoEs["video"]>) {
+  const cinza = "bg-gray-100 text-gray-600", verde = "bg-green-100 text-green-700", amarelo = "bg-yellow-100 text-yellow-800",
+        vermelho = "bg-red-100 text-red-700", azul = "bg-blue-100 text-blue-700";
+  const min = (d?: string | null) => { if (!d) return null; const t = new Date(d).getTime(); return isNaN(t) ? null : Math.round((Date.now() - t) / 60000); };
+  if (v.producao === "aguardando_fotos") return { chave: "sem_fotos", rotulo: "Sem fotos", detalhe: "O cliente ainda não enviou as fotos. O link da página de fotos vai no e-mail da música.", cor: cinza };
+  if (v.producao === "erro") return { chave: "erro", rotulo: "Erro de geração", detalhe: v.erro_msg ? `O render falhou: ${v.erro_msg}` : "O render falhou.", cor: vermelho };
+  if (v.producao === "concluido") {
+    if (v.entrega_email) return { chave: "entregue", rotulo: "Entregue", detalhe: "Vídeo pronto e e-mail enviado.", cor: verde };
+    return { chave: "pendente_envio", rotulo: "Pendente envio", detalhe: "Vídeo pronto, mas o e-mail não saiu.", cor: amarelo };
+  }
+  const m = min(v.atualizado_em);
+  if (m !== null && m > VIDEO_TRAVADO_MIN) {
+    return { chave: "erro", rotulo: "Erro de geração", detalhe: v.producao === "renderizando" ? `Travado em "renderizando" há ${m} min.` : `Na fila há ${m} min e o render nunca começou.`, cor: vermelho };
+  }
+  return { chave: "renderizando", rotulo: v.producao === "renderizando" ? "Renderizando" : "Aguardando render", detalhe: v.producao === "renderizando" ? "O vídeo está sendo feito agora." : "Fotos recebidas, esperando o render começar.", cor: azul };
+}
 
 /** Uma linha de entrega, com os três estados que o pedido pode ter. */
 function Entrega({

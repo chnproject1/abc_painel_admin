@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
+import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe } from "@/lib/es-ofertas";
 
 /**
  * Entrada de pedidos da operação ES (LATAM) (model PedidoEs).
@@ -8,8 +10,16 @@ import { prisma } from "@/lib/prisma";
  * `id` do Stripe. Todas as escritas são absolutas (nunca incrementam), então
  * reenviar a mesma ação reescreve os mesmos valores em vez de duplicar.
  *
- * Funil: venda inicial -> up1 (página Premium) -> up2 (2 músicas extras)
- *        -> ds (página Premium, só ofertado se up1 e up2 forem recusados)
+ * Funil: venda inicial -> up1 (página Premium) -> up2 (vídeo com fotos)
+ *        -> ds1 (comprou só o vídeo: oferece a página), ds2 (comprou só a
+ *           página: oferece o vídeo) ou ds3 (recusou os dois: os dois juntos).
+ *           Os três gravam em ds_status; qual foi se deduz pelo que já estava
+ *           pago. Regras em lib/es-ofertas.ts.
+ *
+ * Vídeo (up2 ou ds que inclui o vídeo): a produção fica em PedidoVideoEs. A
+ * linha é criada aqui, na hora em que a venda libera o vídeo, e a resposta
+ * devolve `video_token` / `video_link` pro funil mandar o cliente pra página
+ * de fotos (e pro n8n pôr o mesmo link no e-mail).
  *
  * Proteção: se ES_CHECKOUT_SECRET (ou a antiga US_CHECKOUT_SECRET) estiver definida no ambiente, exige o header
  * `x-checkout-secret`. Sem a variável a rota fica aberta — mesmo padrão do
@@ -62,12 +72,13 @@ const lista = (v: unknown): string[] =>
 
 /**
  * Traduz o registro bruto do funil para os status e valores por oferta que o
- * portal usa. Mapeamento definido no funil: pagina = up1, versoes = up2,
- * combo = ds — e o combo entrega as duas coisas.
+ * portal usa. Nomes que o funil manda: pagina = up1, video = up2 (o antigo
+ * `versoes` das músicas extras ainda é aceito), ds / ds1 / ds2 / ds3 = downsell
+ * (o antigo `combo` também). Qual downsell foi se deduz pelo que já estava pago.
  *
- * O plano composto vem pronto do funil; o sufixo `_ds` é o que identifica
- * que a compra foi o combo, já que `upsell` lista os dois entregáveis nos
- * dois casos.
+ * No funil ES, `upsell` lista os PRODUTOS pagos ('video,ds1'), alinhados com
+ * `upsell_amount`. Nos pedidos antigos do US ela listava entregáveis, e só o
+ * sufixo `_ds` do plano identificava o combo.
  */
 function derivarOfertas(linha: {
   plano?: string | null;
@@ -83,8 +94,8 @@ function derivarOfertas(linha: {
     // O produto recusado vem no início do upsell_erro, no formato "produto:codigo"
     const produto = String(linha.upsell_erro ?? "").split(":")[0].replace("-teste", "");
     if (produto === "pagina")  out.up1_status = "recusado";
-    if (produto === "versoes") out.up2_status = "recusado";
-    if (produto === "combo")   out.ds_status  = "recusado";
+    if (produto === "versoes" || produto === "video") out.up2_status = "recusado";
+    if (produto === "combo"   || /^ds[123]?$/.test(produto)) out.ds_status  = "recusado";
     return out;
   }
 
@@ -94,25 +105,33 @@ function derivarOfertas(linha: {
   const valores   = lista(linha.upsell_amount);
   const soma = (arr: string[]) => arr.reduce((t, v) => t + (parseFloat(v) || 0), 0);
 
-  // Combo (downsell): uma cobrança só, entregando página + as duas músicas
-  if (/_ds$/.test(plano)) {
+  const ehDs = (e: string) => /^ds[123]?$/.test(e) || e === "combo";
+
+  // Pedido antigo do funil US: o combo gravava os entregáveis ('pagina,versoes')
+  // e só o `_ds` do plano dizia que foi downsell — uma cobrança só, valor somado.
+  if (/_ds$/.test(plano) && !entregues.some(ehDs)) {
     out.ds_status = "pago";
     const total = soma(valores);
     if (total > 0) out.ds_valor = total;
     return out;
   }
 
-  // Fora do combo, cada compra acrescenta um entregável — os dois índices
-  // andam juntos, então dá para casar entregável com valor.
+  // Funil ES: um produto por cobrança ('video,ds1'), na mesma posição do
+  // valor ('23.00,9.00'). O downsell pode vir depois de um upsell pago, então
+  // cada valor fica com a oferta dele — nunca somar.
   entregues.forEach((produto, i) => {
     const v = parseFloat(valores[i] ?? "");
     if (produto === "pagina") {
       out.up1_status = "pago";
       if (Number.isFinite(v)) out.up1_valor = v;
     }
-    if (produto === "versoes") {
+    if (produto === "versoes" || produto === "video") {
       out.up2_status = "pago";
       if (Number.isFinite(v)) out.up2_valor = v;
+    }
+    if (ehDs(produto)) {
+      out.ds_status = "pago";
+      if (Number.isFinite(v)) out.ds_valor = v;
     }
   });
 
@@ -147,21 +166,17 @@ function tierDe(plano: string | null | undefined): string {
   return plano?.startsWith("silver") ? "silver" : "basic";
 }
 
-/**
- * Deriva o plano a partir dos status das ofertas.
- * O downsell é exclusivo: quando pago, substitui os sufixos de upsell.
- */
-function montarPlano(
-  tier: string,
-  up1: string | null,
-  up2: string | null,
-  ds: string | null,
-): string {
-  if (ds === "pago") return `${tier}_ds`;
-  let plano = tier;
-  if (up1 === "pago") plano += "_up1";
-  if (up2 === "pago") plano += "_up2";
-  return plano;
+/* O plano é derivado em lib/es-ofertas.ts (montarPlanoEs): o `_ds` se soma
+   aos sufixos de upsell, porque agora o downsell pode vir junto com um deles. */
+
+/** Garante a linha de produção do vídeo quando a venda libera o vídeo. Idempotente. */
+async function garantirVideo(id: string, ofertas: { up1_status?: string | null; up2_status?: string | null; ds_status?: string | null }) {
+  if (!liberacoes(ofertas).video) return null;
+  let v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: id }, select: { token: true, producao: true, video_path: true } });
+  if (!v) {
+    v = await prisma.pedidoVideoEs.create({ data: { pedido_id: id, token: gerarToken() }, select: { token: true, producao: true, video_path: true } });
+  }
+  return { video_token: v.token, video_link: linkFotosEs(v.token), video_producao: v.producao, video_ver_link: linkVerVideoEs(v.token), video_url: urlPublica(v.video_path) };
 }
 
 function valorNumerico(v: any): number | undefined {
@@ -178,19 +193,20 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return erro("id obrigatório", 400);
 
-  const p = await prisma.pedidoEs.findUnique({ where: { id } });
+  const p = await prisma.pedidoEs.findUnique({ where: { id }, include: { video: true } });
   if (!p) return NextResponse.json({ data: {} });
 
-  // O n8n usa isto para decidir se entrega o link da página Premium
-  const entrega_pagina = p.up1_status === "pago" || p.ds_status === "pago";
+  // O n8n usa isto para decidir o que entregar
+  const lib = liberacoes(p);
+  const entrega_pagina = lib.pagina;
+  const entrega_video  = lib.video;
 
   // O funil fechou quando todas as ofertas que chegaram a ser exibidas
-  // têm resposta. O ds só é exibido se up1 e up2 forem recusados.
-  const dsFoiOfertado = p.up1_status !== "pago" && p.up2_status !== "pago";
+  // têm resposta. O ds é exibido se alguma das duas foi recusada.
   const funil_completo =
     p.up1_status !== null &&
     p.up2_status !== null &&
-    (!dsFoiOfertado || p.ds_status !== null);
+    (!dsFoiOfertado(p) || p.ds_status !== null);
 
   return NextResponse.json({
     data: {
@@ -231,7 +247,17 @@ export async function GET(req: NextRequest) {
 
       // Sinais de controle para a automação
       entrega_pagina,
+      entrega_video,
+      ds_tipo: p.ds_status === "pago" ? dsTipoDe(p) : null,
       funil_completo,
+
+      // Vídeo (upsell 2) — produção em PedidoVideoEs
+      video_token:    p.video?.token ?? null,
+      video_link:     p.video ? linkFotosEs(p.video.token) : null,      // página de fotos
+      video_ver_link: p.video ? linkVerVideoEs(p.video.token) : null,   // página do vídeo pronto
+      video_producao: p.video?.producao ?? null,
+      video_url:      urlPublica(p.video?.video_path),
+      video_entrega_email: p.video?.entrega_email ?? false,
 
       // Produção — música 1
       gerou_musica: p.gerou_musica,
@@ -337,6 +363,23 @@ export async function POST(req: NextRequest) {
     return ok({ message: "Pedido registrado", plano: pedido.plano, aviso });
   }
 
+  /* ── action 'rastreado': venda da frente registrada na UTMify/Meta/TikTok ──
+     Mesmo formato do /api/checkout do BR, pra o fluxo de rastreio (Power
+     Automate) ser copiado trocando só a URL e o segredo. O /api/es/n8n
+     aceita a mesma ação. Não passa pelo switch: não mexe em status nem plano. */
+  if (data.action === "rastreado") {
+    try {
+      await prisma.pedidoEs.update({
+        where: { id: data.id },
+        data: { rastreado: data.rastreado === false ? false : true },
+      });
+    } catch (e: any) {
+      if (e?.code === "P2025") return ok({ message: "Pedido não encontrado, ignorado" });
+      throw e;
+    }
+    return ok({ message: "Pedido marcado como rastreado" });
+  }
+
   /* ── Com action: etapas do funil ── */
   if (!ACOES.includes(data.action)) {
     return erro(`action desconhecida: ${data.action}. Válidas: ${ACOES.join(", ")}`, 400);
@@ -401,11 +444,14 @@ export async function POST(req: NextRequest) {
         valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
       },
     });
+    const video = await garantirVideo(pedido.id, pedido);
 
     return ok({
       message: `${Object.keys(merge).length} campo(s) atualizado(s)`,
       pedido,
-      entrega_pagina: pedido.up1_status === "pago" || pedido.ds_status === "pago",
+      entrega_pagina: liberacoes(pedido).pagina,
+      entrega_video:  liberacoes(pedido).video,
+      ...(video ?? {}),
       ...(ignorados.length ? { ignorados } : {}),
       aviso,
     });
@@ -445,8 +491,9 @@ export async function POST(req: NextRequest) {
       break;
 
     case "ds_pago":
-      if (atual.up1_status === "pago" || atual.up2_status === "pago") {
-        alerta = "downsell registrado com up1 ou up2 já pago — o funil não deveria ter ofertado o ds";
+      // Pode vir com up1 ou up2 já pago: é o downsell da oferta que faltou
+      if (atual.up1_status === "pago" && atual.up2_status === "pago") {
+        alerta = "downsell registrado com up1 e up2 já pagos — não havia o que ofertar";
       }
       ds_status = "pago";
       update.ds_status = "pago";
@@ -463,9 +510,8 @@ export async function POST(req: NextRequest) {
     case "finalizar": {
       if (up1_status === null) { up1_status = "recusado"; update.up1_status = "recusado"; }
       if (up2_status === null) { up2_status = "recusado"; update.up2_status = "recusado"; }
-      // O ds só é ofertado quando up1 e up2 são recusados
-      const dsFoiOfertado = up1_status !== "pago" && up2_status !== "pago";
-      if (dsFoiOfertado && ds_status === null) {
+      // O ds é ofertado a quem recusou pelo menos uma das duas
+      if (dsFoiOfertado({ up1_status, up2_status }) && ds_status === null) {
         ds_status = "recusado";
         update.ds_status = "recusado";
       }
@@ -474,7 +520,7 @@ export async function POST(req: NextRequest) {
   }
 
   // O plano acompanha os status das ofertas
-  update.plano = montarPlano(tier, up1_status, up2_status, ds_status);
+  update.plano = montarPlanoEs(tier, { up1_status, up2_status, ds_status });
 
   const pedido = await prisma.pedidoEs.update({
     where: { id: data.id },
@@ -486,12 +532,17 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const entrega_pagina = pedido.up1_status === "pago" || pedido.ds_status === "pago";
+  const lib = liberacoes(pedido);
+  const video = await garantirVideo(pedido.id, pedido);
 
   return ok({
     message: `Ação "${data.action}" aplicada`,
     pedido,
-    entrega_pagina,
+    entrega_pagina: lib.pagina,
+    entrega_video:  lib.video,
+    ds_tipo: lib.ds_tipo,
+    // Quando a venda libera o vídeo: pra onde mandar o cliente subir as fotos
+    ...(video ?? {}),
     ...(alerta ? { alerta } : {}),
     aviso,
   });

@@ -2,17 +2,25 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { WHERE_VIDEO_LIBERADO } from "@/lib/es-ofertas";
+import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 // A operação ES (LATAM) nasce junto com o portal, então não existe corte de data
 // como o INICIO_AUTOMACAO da operação BR.
 /* Uma entrega pendente é qualquer coisa que o cliente comprou e ainda não
  * recebeu: a música principal, ou as extras do upsell 2 / downsell. */
+/* Pedidos antigos (EUA) tinham músicas extras no up2; os novos (LATAM) têm o
+   vídeo, cuja produção mora em PedidoVideoEs. A linha de vídeo só existe pra
+   pedido novo, então "video is null" separa os dois mundos sem coluna extra. */
 const PENDENTE = {
   status: "pago",
   OR: [
     { entrega_email: false },
-    { AND: [{ OR: [{ up1_status: "pago" }, { ds_status: "pago" }] }, { pagina_entrega_email: false }] },
-    { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }] },
+    { AND: [{ OR: [{ up1_status: "pago" }, { ds_status: "pago", NOT: { up1_status: "pago" } }] }, { pagina_entrega_email: false }] },
+    // músicas extras (pedidos antigos, sem vídeo)
+    { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }, { video: null }] },
+    // vídeo pronto e e-mail não saiu
+    { video: { is: { producao: "concluido", entrega_email: false } } },
   ],
 };
 
@@ -22,9 +30,22 @@ const ERRO = {
   status: "pago",
   OR: [
     { gerou_musica: false, entrega_email: false },
-    { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_gerou_musica: false, up_entrega_email: false }] },
+    { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_gerou_musica: false, up_entrega_email: false }, { video: null }] },
+    { video: { is: { producao: "erro" } } },
   ],
 };
+
+/* Vídeo: mesma leitura de estado do BR (lib/video-estado.ts). Travado =
+   renderizando (ou na fila) há mais de VIDEO_TRAVADO_MIN sem atualização. */
+const travadoDesde = () => new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+const VIDEO_PENDENTE_ENVIO = { video: { is: { producao: "concluido", entrega_email: false } } };
+const VIDEO_ERRO = () => ({
+  video: { is: { OR: [
+    { producao: "erro" },
+    { producao: "renderizando", atualizado_em: { lt: travadoDesde() } },
+    { producao: "fotos_enviadas", atualizado_em: { lt: travadoDesde() } },
+  ] } },
+});
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -44,6 +65,13 @@ export async function GET() {
     recUp1,
     recUp2,
     recDs,
+    video_total,
+    video_sem_fotos,
+    video_pendentes_envio,
+    video_erro,
+    video_entregues,
+    pendentes_rastreio,
+    video_sem_rastreio,
   ] = await Promise.all([
     // Iniciaram o checkout
     prisma.pedidoEs.count(),
@@ -84,6 +112,18 @@ export async function GET() {
     prisma.pedidoEs.aggregate({ where: { up1_status: "pago" }, _sum: { up1_valor: true } }),
     prisma.pedidoEs.aggregate({ where: { up2_status: "pago" }, _sum: { up2_valor: true } }),
     prisma.pedidoEs.aggregate({ where: { ds_status: "pago" },  _sum: { ds_valor: true } }),
+
+    // Vídeo (upsell 2 / downsell com vídeo)
+    prisma.pedidoEs.count({ where: { status: "pago", ...WHERE_VIDEO_LIBERADO, video: { isNot: null } } }),   // pedidos antigos (extras) não têm linha de vídeo
+    prisma.pedidoEs.count({ where: { status: "pago", ...WHERE_VIDEO_LIBERADO, video: { is: { producao: "aguardando_fotos" } } } }),
+    prisma.pedidoEs.count({ where: { status: "pago", ...VIDEO_PENDENTE_ENVIO } }),
+    prisma.pedidoEs.count({ where: { status: "pago", ...VIDEO_ERRO() } }),
+    prisma.pedidoEs.count({ where: { status: "pago", video: { is: { entrega_email: true } } } }),
+
+    // Rastreio: venda paga que o n8n ainda não registrou na UTMify/Meta/TikTok.
+    // Frente no PedidoEs; a venda que liberou o vídeo (up2/ds2/ds3) no PedidoVideoEs.
+    prisma.pedidoEs.count({ where: { status: "pago", rastreado: false } }),
+    prisma.pedidoEs.count({ where: { status: "pago", video: { is: { rastreado: false } } } }),
   ]);
 
   const soma = (v: unknown) => Number(v ?? 0);
@@ -104,12 +144,17 @@ export async function GET() {
     erro_geracao,
     pendentes_envio_up,
     erro_geracao_up,
+    pendentes_rastreio,
     receita: {
       inicial: receitaInicial,
       up1:     receitaUp1,
       up2:     receitaUp2,
       ds:      receitaDs,
       total:   receita_total,
+    },
+    video: {
+      total: video_total, sem_fotos: video_sem_fotos, pendentes_envio: video_pendentes_envio,
+      erro: video_erro, entregues: video_entregues, sem_rastreio: video_sem_rastreio,
     },
   });
 }

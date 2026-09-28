@@ -138,6 +138,41 @@ model PedidoVideo {
 // Sem telefone/WhatsApp (contato só por email) e sem campos fiscais brasileiros.
 // Funil: venda inicial -> up1 (página Premium) -> up2 (2 músicas extras)
 //        -> ds (página Premium, só aparece se up1 e up2 forem recusados)
+// Upsell 2 da operação ES: vídeo com as fotos do cliente + música 1.
+// A VENDA fica em PedidoEs (up2_status / ds_status); aqui só a produção.
+// Mesmo desenho da PedidoVideo do BR, sem PIX, sem WhatsApp, sem UTM própria.
+model PedidoVideoEs {
+  pedido_id String   @id // = PedidoEs.id (cs_ da Stripe)
+  pedido    PedidoEs @relation(fields: [pedido_id], references: [id])
+
+  token    String @unique // vai no link /fotos-es/?t= e /video-es/?t=
+  producao String @default("aguardando_fotos") // aguardando_fotos | fotos_enviadas | renderizando | concluido | erro
+
+  fotos      Json     @default("[]") // [{path, w, h, ordem}] — path = fotos/<token>/1.jpg
+  opcoes     Json     @default("{}")
+  musica_seg Decimal? @db.Decimal(8, 2)
+
+  video_path String? // videos/<token>/final.mp4
+
+  entrega_email Boolean @default(false) // e-mail com o link do vídeo saiu
+  erro_msg      String?
+  tentativas    Int     @default(0)
+
+  // Venda que liberou o vídeo (up2, ds2 ou ds3) registrada na UTMify/Meta/
+  // TikTok. Marcado pelo n8n com action 'video_rastreado' em /api/es/n8n.
+  rastreado     Boolean @default(false)
+
+  aberto_em    DateTime?
+  fotos_em     DateTime?
+  concluido_em DateTime?
+  entregue_em  DateTime?
+  criado_em    DateTime  @default(now())
+  atualizado_em DateTime @updatedAt
+
+  @@index([producao])
+  @@index([criado_em])
+}
+
 model PedidoEs {
   id            String    @id                  // ID da cobrança no Stripe (o mesmo durante toda a compra)
 
@@ -208,6 +243,9 @@ model PedidoEs {
   recovery_id   String?
   recuperacao   Int       @default(0)
 
+  // Upsell 2 (vídeo com fotos): produção fica na tabela própria
+  video         PedidoVideoEs?
+
   // Visível apenas para admin
   data_pedido   DateTime?
   valor         Decimal?  @db.Decimal(10, 2)   // venda inicial, em USD
@@ -225,6 +263,11 @@ model PedidoEs {
   ttclid        String?
   pixel_id      String?
   ip            String?
+
+  // Venda da frente (silver | basic) registrada na UTMify/Meta/TikTok.
+  // Marcado pelo n8n com action 'rastreado' em /api/es/n8n. A venda do
+  // vídeo tem o próprio campo, em PedidoVideoEs.
+  rastreado     Boolean @default(false)
 
   // Cookies e user-agent do navegador. Pesam mais que o fbclid no pareamento
   // do Meta CAPI e do TikTok Events API — o fbc remontado a partir do fbclid

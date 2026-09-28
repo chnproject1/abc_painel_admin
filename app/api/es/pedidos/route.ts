@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { WHERE_VIDEO_LIBERADO } from "@/lib/es-ofertas";
+import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 const LIMIT = 50;
 
@@ -27,8 +29,9 @@ export async function GET(req: NextRequest) {
       where.status = "pago";
       where.OR = [
         { entrega_email: false },
-        { AND: [{ OR: [{ up1_status: "pago" }, { ds_status: "pago" }] }, { pagina_entrega_email: false }] },
-        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }] },
+        { AND: [{ OR: [{ up1_status: "pago" }, { ds_status: "pago", NOT: { up1_status: "pago" } }] }, { pagina_entrega_email: false }] },
+        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_entrega_email: false }, { video: null }] },
+        { video: { is: { producao: "concluido", entrega_email: false } } },
       ];
       break;
     // Alguma geração falhou — principal ou extras
@@ -36,8 +39,43 @@ export async function GET(req: NextRequest) {
       where.status = "pago";
       where.OR = [
         { gerou_musica: false, entrega_email: false },
-        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_gerou_musica: false, up_entrega_email: false }] },
+        { AND: [{ OR: [{ up2_status: "pago" }, { ds_status: "pago" }] }, { up_gerou_musica: false, up_entrega_email: false }, { video: null }] },
+        { video: { is: { producao: "erro" } } },
       ];
+      break;
+    // Vídeo (upsell 2 / downsell com vídeo)
+    case "video":
+      where.status = "pago";
+      Object.assign(where, WHERE_VIDEO_LIBERADO);
+      where.video = { isNot: null };   // pedidos antigos (músicas extras) ficam de fora
+      break;
+    case "video_sem_fotos":
+      where.status = "pago";
+      Object.assign(where, WHERE_VIDEO_LIBERADO);
+      where.video = { is: { producao: "aguardando_fotos" } };
+      break;
+    case "video_pendentes":
+      where.status = "pago";
+      where.video = { is: { producao: "concluido", entrega_email: false } };
+      break;
+    case "video_erro": {
+      const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+      where.status = "pago";
+      where.video = { is: { OR: [
+        { producao: "erro" },
+        { producao: "renderizando", atualizado_em: { lt: travado } },
+        { producao: "fotos_enviadas", atualizado_em: { lt: travado } },
+      ] } };
+      break;
+    }
+    // Rastreio: venda paga ainda não registrada na UTMify/Meta/TikTok
+    case "rastreio":
+      where.status = "pago";
+      where.rastreado = false;
+      break;
+    case "video_rastreio":
+      where.status = "pago";
+      where.video = { is: { rastreado: false } };
       break;
     // Upsell 2 comprado e ainda não entregue
     case "pendentes_up":

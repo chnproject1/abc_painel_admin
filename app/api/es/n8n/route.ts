@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
+import { liberacoes } from "@/lib/es-ofertas";
 
 /**
  * Callbacks das automações da operação ES (LATAM) (model PedidoEs).
@@ -23,6 +25,8 @@ const ACOES = [
   "pagina_entregue", "pagina_erro",
   // Fluxo 3 — upsell 2, músicas 2 e 3
   "up_music_ready", "up_email_entregue", "up_email_erro", "up_erro_geracao",
+  // Rastreio — venda da frente registrada na UTMify/Meta/TikTok
+  "rastreado",
 ];
 
 function autorizado(req: NextRequest): boolean {
@@ -47,6 +51,104 @@ function txt(v: any): string | undefined {
   return v === undefined || v === null || v === "" ? undefined : String(v);
 }
 
+/* ── Vídeo (upsell 2 / downsell com vídeo) ──────────────────────────────
+   Mesmos nomes do BR, sem WhatsApp: a entrega aqui é por e-mail. A tabela é
+   PedidoVideoEs, 1:1 com PedidoEs; `id` é sempre o id do pedido (cs_ da Stripe). */
+const ACOES_VIDEO = [
+  "video_dados", "video_renderizando", "video_concluido", "video_erro",
+  "video_entregue", "video_email_erro", "video_regerar", "video_rastreado",
+];
+
+async function acaoVideo(action: string, id: string, data: any) {
+  const nao = (msg: string, status = 400) => NextResponse.json({ success: false, error: msg }, { status });
+  if (!ACOES_VIDEO.includes(action)) return nao(`action desconhecida: ${action}. Válidas: ${ACOES_VIDEO.join(", ")}`);
+
+  const video = await prisma.pedidoVideoEs.findUnique({
+    where: { pedido_id: id },
+    include: { pedido: { select: { nome: true, email: true, link_audio: true, estilo: true, idioma: true, up2_status: true, ds_status: true } } },
+  });
+  if (!video) return nao(`Pedido ${id} não tem vídeo em PedidoVideoEs (não comprou o upsell 2 nem o downsell com vídeo)`, 404);
+
+  // Tudo que o fluxo de produção precisa numa chamada só
+  if (action === "video_dados") {
+    const fotos = Array.isArray(video.fotos) ? (video.fotos as any[]) : [];
+    return NextResponse.json({
+      success: true,
+      id: video.pedido_id,
+      token: video.token,
+      link: linkFotosEs(video.token),          // página de fotos
+      ver_link: linkVerVideoEs(video.token),   // página do vídeo pronto (vai no e-mail)
+      producao: video.producao,
+      nome: video.pedido.nome,
+      email: video.pedido.email,
+      idioma: video.pedido.idioma,
+      estilo: video.pedido.estilo,
+      musica_url: video.pedido.link_audio,
+      musica_seg: video.musica_seg != null ? Number(video.musica_seg) : null,
+      fotos: fotos.map(f => ({ url: urlPublica(f.path), path: f.path, w: f.w, h: f.h, ordem: f.ordem })),
+      opcoes: video.opcoes,
+      video_url: urlPublica(video.video_path),
+      entrega_email: video.entrega_email,
+      erro_msg: video.erro_msg,
+      tentativas: video.tentativas,
+    });
+  }
+
+  // Venda que liberou o vídeo (up2, ds2 ou ds3) registrada na UTMify/Meta/
+  // TikTok. Chamado pelos fluxos do up2 e do downsell quando `entregaveis`
+  // inclui 'video'. Reenviar é inofensivo: devolve ja_estava.
+  if (action === "video_rastreado") {
+    if (video.rastreado) return NextResponse.json({ success: true, ja_estava: true, message: "Já estava marcado como rastreado" });
+    await prisma.pedidoVideoEs.update({ where: { pedido_id: id }, data: { rastreado: true } });
+    return NextResponse.json({ success: true, ja_estava: false, message: "Venda do vídeo marcada como rastreada" });
+  }
+
+  let update: any;
+  let mensagem: string;
+  switch (action) {
+    case "video_renderizando":
+      update = { producao: "renderizando", erro_msg: null };
+      mensagem = "Vídeo em renderização";
+      break;
+    case "video_concluido":
+      update = {
+        producao: "concluido", concluido_em: new Date(), erro_msg: null,
+        video_path: txt(data.video_path),
+        musica_seg: data.musica_seg != null && !isNaN(Number(data.musica_seg)) ? Number(data.musica_seg) : undefined,
+      };
+      mensagem = "Vídeo concluído";
+      break;
+    case "video_erro":
+      update = { producao: "erro", erro_msg: String(data.erro_msg || "erro sem mensagem").slice(0, 1000), tentativas: { increment: 1 } };
+      mensagem = "Erro do vídeo registrado";
+      break;
+    case "video_entregue":
+      update = { entrega_email: true, entregue_em: new Date() };
+      mensagem = "E-mail do vídeo marcado como enviado";
+      break;
+    case "video_email_erro":
+      update = { entrega_email: false, erro_msg: `e-mail: ${String(data.erro_msg || "falha no envio").slice(0, 900)}` };
+      mensagem = "Falha no e-mail do vídeo registrada";
+      break;
+    case "video_regerar":
+      // Música 1 refeita depois do vídeo pronto: refaz o vídeo sem cobrar
+      if (video.producao === "aguardando_fotos") {
+        return NextResponse.json({ success: true, skipped: "sem_fotos", message: "Cliente ainda não enviou as fotos" });
+      }
+      update = { producao: "fotos_enviadas", entrega_email: false, erro_msg: null, concluido_em: null };
+      mensagem = "Vídeo voltou pra fila de render";
+      break;
+    default:
+      return nao("action não tratada");
+  }
+
+  const v = await prisma.pedidoVideoEs.update({ where: { pedido_id: id }, data: update });
+  return NextResponse.json({
+    success: true, message: mensagem,
+    video: { producao: v.producao, entrega_email: v.entrega_email, video_url: urlPublica(v.video_path), ver_link: linkVerVideoEs(v.token) },
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (!autorizado(req)) {
     return NextResponse.json({ success: false, error: "Não autorizado" }, { status: 401 });
@@ -63,9 +165,23 @@ export async function POST(req: NextRequest) {
   if (!id)     return NextResponse.json({ success: false, error: "id obrigatório" }, { status: 400 });
   if (!action) return NextResponse.json({ success: false, error: "action obrigatório" }, { status: 400 });
 
+  // Vídeo (upsell 2): tabela própria, tratado à parte
+  if (String(action).startsWith("video_")) {
+    /* video_rastreado aceita também o id do PAGAMENTO do vídeo (pi_... do
+       up2/ds2/ds3), como no BR, onde o fluxo de rastreio só conhece o id da
+       cobrança. O pi_ fica na lista upsell_payment_id do pedido. */
+    let pedidoId = String(id);
+    if (action === "video_rastreado" && pedidoId.startsWith("pi_")) {
+      const dono = await prisma.pedidoEs.findFirst({ where: { upsell_payment_id: { contains: pedidoId } }, select: { id: true } });
+      if (!dono) return NextResponse.json({ success: false, error: "Nenhum pedido com esse pagamento" }, { status: 404 });
+      pedidoId = dono.id;
+    }
+    return acaoVideo(String(action), pedidoId, data);
+  }
+
   if (!ACOES.includes(action)) {
     return NextResponse.json(
-      { success: false, error: `action desconhecida: ${action}. Válidas: ${ACOES.join(", ")}` },
+      { success: false, error: `action desconhecida: ${action}. Válidas: ${ACOES.join(", ")}, ${ACOES_VIDEO.join(", ")}` },
       { status: 400 },
     );
   }
@@ -159,6 +275,19 @@ export async function POST(req: NextRequest) {
       mensagem = "Erro de geração das músicas extras registrado";
       break;
 
+    /* ── Rastreio: venda da frente registrada na UTMify/Meta/TikTok ── */
+
+    case "rastreado": {
+      const atual = await prisma.pedidoEs.findUnique({ where: { id }, select: { rastreado: true } });
+      if (atual?.rastreado && data.rastreado !== false) {
+        return NextResponse.json({ success: true, ja_estava: true, message: "Já estava marcado como rastreado" });
+      }
+      // `rastreado: false` no corpo desmarca (pra reprocessar uma venda)
+      update = { rastreado: data.rastreado === false ? false : true };
+      mensagem = update.rastreado ? "Venda marcada como rastreada" : "Rastreio desmarcado";
+      break;
+    }
+
     default:
       return NextResponse.json({ success: false, error: "action não tratada" }, { status: 400 });
   }
@@ -177,9 +306,9 @@ export async function POST(req: NextRequest) {
     });
 
     // Repetido aqui para o fluxo poder ramificar sem consultar o checkout de novo
-    const entrega_pagina = pedido.up1_status === "pago" || pedido.ds_status === "pago";
+    const lib = liberacoes(pedido);
 
-    return NextResponse.json({ success: true, message: mensagem, pedido, entrega_pagina });
+    return NextResponse.json({ success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video });
   } catch (e: any) {
     if (e?.code === "P2025") {
       // Sintoma clássico de ter apontado o nó para a operação errada

@@ -124,6 +124,7 @@ export const CAMPOS_US_ADMIN_EXTRAS = [
   "upsell_payment_id",
   "upsell_erro",
   "upsell_n8n",
+  "rastreado",
   "data_pedido",
   "valor",
   "up1_valor",

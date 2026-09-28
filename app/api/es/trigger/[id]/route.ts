@@ -36,6 +36,11 @@ const FLUXOS = {
     env: "ES_N8N_ENVIO_WEBHOOK_URL",
     corpo: (id: string) => ({ payment_id: id, pedido_id: id, tipo: "envio" }),
   },
+  // Vídeo (upsell 2): manda pra produção de novo com as fotos que já estão lá
+  video: {
+    env: "ES_N8N_VIDEO_WEBHOOK_URL",
+    corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "video" }),
+  },
 } as const;
 
 type Tipo = keyof typeof FLUXOS;
@@ -63,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const pedido = await prisma.pedidoEs.findUnique({
     where: { id },
-    select: { id: true, up2_status: true, ds_status: true },
+    select: { id: true, up1_status: true, up2_status: true, ds_status: true, video: { select: { producao: true } } },
   });
 
   if (!pedido) {
@@ -79,6 +84,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { error: "Este pedido não comprou o upsell 2 nem o downsell — não há músicas extras a gerar" },
       { status: 409 },
     );
+  }
+
+  if (tipo === "video") {
+    if (!pedido.video) {
+      return NextResponse.json({ error: "Este pedido não tem vídeo (não comprou o upsell 2 nem o downsell com vídeo)" }, { status: 409 });
+    }
+    if (pedido.video.producao === "aguardando_fotos") {
+      return NextResponse.json({ error: "O cliente ainda não enviou as fotos — não há o que renderizar" }, { status: 409 });
+    }
+    // Volta pra fila antes de chamar o n8n, como o video_regerar do BR
+    await prisma.pedidoVideoEs.update({
+      where: { pedido_id: id },
+      data: { producao: "fotos_enviadas", entrega_email: false, erro_msg: null, concluido_em: null },
+    });
   }
 
   const fluxo = FLUXOS[tipo];

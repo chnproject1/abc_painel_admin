@@ -35,7 +35,9 @@ interface Stats {
   erro_geracao: number;
   pendentes_envio_up: number;
   erro_geracao_up: number;
+  pendentes_rastreio: number;
   receita: { inicial: number; up1: number; up2: number; ds: number; total: number };
+  video?: { total: number; sem_fotos: number; pendentes_envio: number; erro: number; entregues: number; sem_rastreio: number };
 }
 
 const STATUS_COR: Record<string, string> = {
@@ -50,11 +52,17 @@ const FILTRO_LABEL: Record<string, string> = {
   pagos:        "Compraram",
   pendentes:    "Pendentes envio",
   erro:         "Erro de geração",
-  up1:          "Compraram o upsell 1",
-  up2:          "Compraram o upsell 2",
-  ds:           "Compraram o downsell (página + músicas)",
-  pendentes_up: "Músicas extras pendentes",
-  erro_up:      "Erro de geração (músicas extras)",
+  up1:          "Compraram o upsell 1 (Página Premium)",
+  up2:          "Compraram o upsell 2 (Vídeo)",
+  ds:           "Compraram o downsell",
+  pendentes_up: "Músicas extras pendentes (pedidos antigos)",
+  erro_up:      "Erro de geração (músicas extras, pedidos antigos)",
+  video:           "Vídeo: compraram",
+  video_sem_fotos: "Vídeo: sem fotos",
+  video_pendentes: "Vídeo: pendentes envio",
+  video_erro:      "Vídeo: erro de geração",
+  rastreio:        "Sem rastreio (venda da frente)",
+  video_rastreio:  "Vídeo: sem rastreio (up2 / ds2 / ds3)",
 };
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -305,20 +313,35 @@ function DashboardUsContent() {
           <div className="mb-6 space-y-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                 <StatCard label="Total"            value={stats.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
                 <StatCard label="Pagas"            value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
                 <StatCard label="Pendentes envio"  value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
                 <StatCard label="Erro de geração"  value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
+                <StatCard label="Sem rastreio"     value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"     ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
               </div>
             </div>
+
+            {/* Vídeo (upsell 2 / downsell com vídeo) */}
+            {stats.video && (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Vídeo com fotos (upsell 2)</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+                  <StatCard label="Compraram"       value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video"}           onClick={() => handleCardClick("video")} />
+                  <StatCard label="Sem fotos"       value={stats.video.sem_fotos}       cor="bg-gray-50 border-gray-200 text-gray-600"      ativo={filtroAtivo === "video_sem_fotos"} onClick={() => handleCardClick("video_sem_fotos")} />
+                  <StatCard label="Pendentes envio" value={stats.video.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "video_pendentes"} onClick={() => handleCardClick("video_pendentes")} />
+                  <StatCard label="Erro de geração" value={stats.video.erro}            cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "video_erro"}      onClick={() => handleCardClick("video_erro")} />
+                  <StatCard label="Sem rastreio"    value={stats.video.sem_rastreio}    cor="bg-blue-50 border-blue-200 text-blue-800"       ativo={filtroAtivo === "video_rastreio"}  onClick={() => handleCardClick("video_rastreio")} />
+                </div>
+              </div>
+            )}
 
             <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Faturamento</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div><p className="text-xs text-gray-400">Venda inicial</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.inicial)}</p></div>
                 <div><p className="text-xs text-gray-400">Upsell 1</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.up1)}</p></div>
-                <div><p className="text-xs text-gray-400">Upsell 2</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.up2)}</p></div>
+                <div><p className="text-xs text-gray-400">Upsell 2 · Vídeo</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.up2)}</p></div>
                 <div><p className="text-xs text-gray-400">Downsell</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.ds)}</p></div>
               </div>
               <p className="text-sm text-gray-500 mt-3 pt-3 border-t border-gray-100">

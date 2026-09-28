@@ -26,6 +26,17 @@ export function linkVideo(token: string): string {
   return `${base}?t=${token}`;
 }
 
+// Operação ES: o vídeo é o upsell 2, pago no funil. Duas páginas em espanhol:
+// fotos-es (o cliente sobe as fotos) e video-es (assiste, baixa, compartilha).
+export function linkFotosEs(token: string): string {
+  const base = (process.env.ES_VIDEO_URL || "https://abcmusic-quiz-us.netlify.app/fotos-es/").replace(/\/?$/, "/");
+  return `${base}?t=${token}`;
+}
+export function linkVerVideoEs(token: string): string {
+  const base = (process.env.ES_VER_VIDEO_URL || "https://abcmusic-quiz-us.netlify.app/video-es/").replace(/\/?$/, "/");
+  return `${base}?t=${token}`;
+}
+
 // Pedaço do link depois da raiz do site, pra variável do botão do template do
 // WhatsApp (prefixo fixo "https://abcmusic-quiz.netlify.app/"). Ex.: "upvideo/?t=abc".
 export function sufixoLink(link: string): string {
