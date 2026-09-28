@@ -74,6 +74,19 @@ export const FILTROS_ES: Record<string, () => Where> = {
   sem_rastreio_ds1:   () => ({ AND: [DS1], ds_rastreado: false }),
   sem_rastreio_ds2:   () => ({ AND: [DS2], ds_rastreado: false }),
   sem_rastreio_ds3:   () => ({ AND: [DS3], ds_rastreado: false }),
+
+  // ── Rastreio por PRODUTO (linha de cada produto nas entregas) ──
+  // Página: veio do up1 ou de um downsell que entrega a página (ds1, ds3)
+  // Vídeo:  veio do up2 ou de um downsell que entrega o vídeo (ds2, ds3)
+  sem_rastreio_musica: () => ({ status: "pago", rastreado: false }),
+  sem_rastreio_pagina: () => ({ OR: [
+    { up1_status: "pago", up1_rastreado: false },
+    { AND: [{ OR: [DS1, DS3] }], ds_rastreado: false },
+  ] }),
+  sem_rastreio_video: () => ({ OR: [
+    { up2_status: "pago", up2_rastreado: false },
+    { AND: [{ OR: [DS2, DS3] }], ds_rastreado: false },
+  ] }),
 };
 
 export const ROTULO_FILTRO_ES: Record<string, string> = {
@@ -85,6 +98,7 @@ export const ROTULO_FILTRO_ES: Record<string, string> = {
   video_pendentes: "Vídeo: pendente de envio", video_entregue: "Vídeo: entregue", video_erro: "Vídeo: erro",
   venda_front: "Vendas da frente", venda_up1: "Vendas do up1", venda_up2: "Vendas do up2",
   venda_ds1: "Vendas do ds1", venda_ds2: "Vendas do ds2", venda_ds3: "Vendas do ds3",
+  sem_rastreio_musica: "Música: sem rastreio", sem_rastreio_pagina: "Página Premium: sem rastreio", sem_rastreio_video: "Vídeo: sem rastreio",
   sem_rastreio_front: "Frente sem rastreio", sem_rastreio_up1: "Up1 sem rastreio", sem_rastreio_up2: "Up2 sem rastreio",
   sem_rastreio_ds1: "Ds1 sem rastreio", sem_rastreio_ds2: "Ds2 sem rastreio", sem_rastreio_ds3: "Ds3 sem rastreio",
 };

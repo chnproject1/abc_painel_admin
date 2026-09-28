@@ -31,9 +31,9 @@ interface PedidoEs {
 /* Resposta de /api/es/resumo (regras em lib/es-resumo.ts) */
 interface ResumoEs {
   entregas: {
-    musica: { compraram: number; producao: number; pendente: number; entregue: number; erro: number };
-    pagina: { compraram: number; aguardando: number; pendente: number; entregue: number };
-    video:  { compraram: number; aguardando: number; producao: number; pendente: number; entregue: number; erro: number };
+    musica: { compraram: number; producao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    pagina: { compraram: number; aguardando: number; pendente: number; entregue: number; sem_rastreio: number };
+    video:  { compraram: number; aguardando: number; producao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
   };
   rastreio: { oferta: string; rotulo: string; vendas: number; rastreadas: number; sem_rastreio: number; receita: number }[];
 }
@@ -96,6 +96,58 @@ function Num({
   );
 }
 
+/* Cores dos cards — as mesmas do painel BR (Total branco, Pagas verde,
+   Pendentes amarelo, Erro vermelho, Sem rastreio azul), mais cinza pra
+   "aguardando" (depende do cliente ou da música) e ciano pra "em produção". */
+const COR = {
+  total:      "bg-white border-gray-200 text-gray-800",
+  aguardando: "bg-gray-50 border-gray-200 text-gray-600",
+  producao:   "bg-sky-50 border-sky-200 text-sky-800",
+  pendente:   "bg-yellow-50 border-yellow-200 text-yellow-800",
+  entregue:   "bg-green-50 border-green-200 text-green-800",
+  erro:       "bg-red-50 border-red-200 text-red-800",
+  rastreio:   "bg-blue-50 border-blue-200 text-blue-800",
+};
+
+/* Card compacto (versão menor do StatCard do BR): abre a lista com a mesma
+   regra que contou o número. */
+function MiniCard({
+  rotulo, valor, chave, cor, ativo, onClick,
+}: {
+  rotulo: string; valor: number; chave: string; cor: string; ativo: string | null; onClick: (chave: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(chave)}
+      className={`rounded-lg border px-3 py-2 text-left w-full transition-all hover:opacity-90 hover:shadow-sm ${cor} ${
+        ativo === chave ? "ring-2 ring-offset-1 ring-current" : ""
+      }`}
+    >
+      <p className="text-[10px] font-medium uppercase tracking-wide opacity-70 leading-tight truncate">{rotulo}</p>
+      <p className="text-xl font-bold tabular-nums leading-tight mt-0.5">{valor.toLocaleString("pt-BR")}</p>
+    </button>
+  );
+}
+
+function LinhaProduto({
+  titulo, detalhe, cards, ativo, onClick,
+}: {
+  titulo: string; detalhe?: string; ativo: string | null; onClick: (chave: string) => void;
+  cards: { rotulo: string; valor: number; chave: string; cor: string }[];
+}) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-gray-700 mb-2">
+        {titulo} {detalhe && <span className="text-xs font-normal text-gray-400">{detalhe}</span>}
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {cards.map(c => <MiniCard key={c.chave} {...c} ativo={ativo} onClick={onClick} />)}
+      </div>
+    </div>
+  );
+}
+
 function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null; onClick: (chave: string) => void }) {
   const { musica, pagina, video } = r.entregas;
   const semRastreio = r.rastreio.filter(x => x.sem_rastreio > 0);
@@ -137,55 +189,38 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
         )}
       </div>
 
-      {/* Entregas — por produto */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Entregas · o que o cliente recebe</p>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
-            <thead><tr className="border-b border-gray-100">
-              <th className={thNome}>Produto</th>
-              <th className={th}>Compraram</th><th className={th}>Aguardando</th><th className={th}>Em produção</th>
-              <th className={th}>Pendente envio</th><th className={th}>Entregue</th><th className={th}>Erro</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-50">
-              <tr>
-                <td className={nomeLinha}>🎵 Música</td>
-                <Num valor={musica.compraram} chave="musica" ativo={ativo} onClick={onClick} />
-                <Num ativo={ativo} onClick={onClick} />
-                <Num valor={musica.producao} chave="musica_producao" ativo={ativo} onClick={onClick} />
-                <Num valor={musica.pendente} chave="musica_pendente" tom="pendencia" ativo={ativo} onClick={onClick} />
-                <Num valor={musica.entregue} chave="musica_entregue" tom="ok" ativo={ativo} onClick={onClick} />
-                <Num valor={musica.erro} chave="musica_erro" tom="erro" ativo={ativo} onClick={onClick} />
-              </tr>
-              <tr>
-                <td className={nomeLinha}>✨ Página Premium <span className="text-gray-400 text-xs">up1 · ds1 · ds3</span></td>
-                <Num valor={pagina.compraram} chave="pagina" ativo={ativo} onClick={onClick} />
-                <Num valor={pagina.aguardando} chave="pagina_aguardando" ativo={ativo} onClick={onClick} />
-                <Num ativo={ativo} onClick={onClick} />
-                <Num valor={pagina.pendente} chave="pagina_pendente" tom="pendencia" ativo={ativo} onClick={onClick} />
-                <Num valor={pagina.entregue} chave="pagina_entregue" tom="ok" ativo={ativo} onClick={onClick} />
-                <Num ativo={ativo} onClick={onClick} />
-              </tr>
-              <tr>
-                <td className={nomeLinha}>🎬 Vídeo <span className="text-gray-400 text-xs">up2 · ds2 · ds3</span></td>
-                <Num valor={video.compraram} chave="video" ativo={ativo} onClick={onClick} />
-                <Num valor={video.aguardando} chave="video_sem_fotos" ativo={ativo} onClick={onClick} />
-                <Num valor={video.producao} chave="video_producao" ativo={ativo} onClick={onClick} />
-                <Num valor={video.pendente} chave="video_pendentes" tom="pendencia" ativo={ativo} onClick={onClick} />
-                <Num valor={video.entregue} chave="video_entregue" tom="ok" ativo={ativo} onClick={onClick} />
-                <Num valor={video.erro} chave="video_erro" tom="erro" ativo={ativo} onClick={onClick} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p className="text-[11px] text-gray-400 px-4 py-2 border-t border-gray-50">
-          Aguardando: a página espera a música ficar pronta; o vídeo espera o cliente mandar as fotos.
-        </p>
+      {/* Entregas — uma linha de cards por produto, nas cores do BR */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entregas</p>
+        <LinhaProduto titulo="🎵 Música" ativo={ativo} onClick={onClick} cards={[
+          { rotulo: "Compraram",       valor: musica.compraram,    chave: "musica",              cor: COR.total },
+          { rotulo: "Em produção",     valor: musica.producao,     chave: "musica_producao",     cor: COR.producao },
+          { rotulo: "Pendente envio",  valor: musica.pendente,     chave: "musica_pendente",     cor: COR.pendente },
+          { rotulo: "Entregue",        valor: musica.entregue,     chave: "musica_entregue",     cor: COR.entregue },
+          { rotulo: "Erro de geração", valor: musica.erro,         chave: "musica_erro",         cor: COR.erro },
+          { rotulo: "Sem rastreio",    valor: musica.sem_rastreio, chave: "sem_rastreio_musica", cor: COR.rastreio },
+        ]} />
+        <LinhaProduto titulo="✨ Página Premium" detalhe="up1 · ds1 · ds3" ativo={ativo} onClick={onClick} cards={[
+          { rotulo: "Compraram",         valor: pagina.compraram,    chave: "pagina",              cor: COR.total },
+          { rotulo: "Aguardando música", valor: pagina.aguardando,   chave: "pagina_aguardando",   cor: COR.aguardando },
+          { rotulo: "Pendente envio",    valor: pagina.pendente,     chave: "pagina_pendente",     cor: COR.pendente },
+          { rotulo: "Entregue",          valor: pagina.entregue,     chave: "pagina_entregue",     cor: COR.entregue },
+          { rotulo: "Sem rastreio",      valor: pagina.sem_rastreio, chave: "sem_rastreio_pagina", cor: COR.rastreio },
+        ]} />
+        <LinhaProduto titulo="🎬 Vídeo" detalhe="up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
+          { rotulo: "Compraram",       valor: video.compraram,    chave: "video",              cor: COR.total },
+          { rotulo: "Sem fotos",       valor: video.aguardando,   chave: "video_sem_fotos",    cor: COR.aguardando },
+          { rotulo: "Em produção",     valor: video.producao,     chave: "video_producao",     cor: COR.producao },
+          { rotulo: "Pendente envio",  valor: video.pendente,     chave: "video_pendentes",    cor: COR.pendente },
+          { rotulo: "Entregue",        valor: video.entregue,     chave: "video_entregue",     cor: COR.entregue },
+          { rotulo: "Erro de geração", valor: video.erro,         chave: "video_erro",         cor: COR.erro },
+          { rotulo: "Sem rastreio",    valor: video.sem_rastreio, chave: "sem_rastreio_video", cor: COR.rastreio },
+        ]} />
       </div>
 
       {/* Rastreio — por venda */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Rastreio · cada venda é um pedido na UTMify</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Rastreio</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px]">
             <thead><tr className="border-b border-gray-100">
@@ -504,7 +539,7 @@ function DashboardUsContent() {
 
         {/* Filtro por data */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-6">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Filtrar por data (fuso de Nova York)</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Filtrar por data</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs text-gray-400">Dia exato</label>
