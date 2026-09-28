@@ -52,12 +52,14 @@ export function liberacoes(o: OfertasEs) {
   return { pagina, video, ds_tipo: ds ? dsTipoDe(o) : null };
 }
 
-/** Sufixos do plano acompanham as ofertas pagas. `_ds` continua sendo o marcador do downsell. */
+/** Sufixos do plano acompanham as ofertas pagas. O downsell entra com o número
+ *  (`_ds1` | `_ds2` | `_ds3`), pra o plano dizer QUAL foi — ex.: basic_up2_ds1.
+ *  `_ds` sem número só existe nos pedidos antigos do funil EUA (combo). */
 export function montarPlanoEs(tier: string, o: OfertasEs): string {
   let plano = tier;
   if (o.up1_status === "pago") plano += "_up1";
   if (o.up2_status === "pago") plano += "_up2";
-  if (o.ds_status === "pago")  plano += "_ds";
+  if (o.ds_status === "pago")  plano += "_" + dsTipoDe(o);
   return plano;
 }
 
@@ -74,5 +76,31 @@ export const WHERE_PAGINA_LIBERADA = {
   OR: [
     { up1_status: "pago" },
     { ds_status: "pago", NOT: { up1_status: "pago" } },
+  ],
+};
+
+/* ── Rastreio por oferta ──────────────────────────────────────────────
+   Cada oferta é um pedido próprio na UTMify (<id>, <id>_up1, _up2, _ds1…) e
+   tem o próprio campo "já registrado". O fluxo de rastreio marca com
+   { action: "rastreado", oferta } — os nomes são os que o rastreio-api usa. */
+export const COLUNA_RASTREIO = {
+  front: "rastreado",
+  up1:   "up1_rastreado",
+  up2:   "up2_rastreado",
+  ds:    "ds_rastreado",
+  ds1:   "ds_rastreado",
+  ds2:   "ds_rastreado",
+  ds3:   "ds_rastreado",
+} as const;
+
+export type OfertaRastreio = keyof typeof COLUNA_RASTREIO;
+
+/** Pedido com ALGUMA oferta paga e ainda não registrada na UTMify. */
+export const WHERE_SEM_RASTREIO = {
+  OR: [
+    { status: "pago",     rastreado: false },
+    { up1_status: "pago", up1_rastreado: false },
+    { up2_status: "pago", up2_rastreado: false },
+    { ds_status: "pago",  ds_rastreado: false },
   ],
 };

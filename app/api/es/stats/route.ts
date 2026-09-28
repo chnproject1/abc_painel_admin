@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { WHERE_VIDEO_LIBERADO } from "@/lib/es-ofertas";
+import { WHERE_VIDEO_LIBERADO, WHERE_SEM_RASTREIO } from "@/lib/es-ofertas";
 import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 // A operação ES (LATAM) nasce junto com o portal, então não existe corte de data
@@ -122,7 +122,7 @@ export async function GET() {
 
     // Rastreio: venda paga que o n8n ainda não registrou na UTMify/Meta/TikTok.
     // Frente no PedidoEs; a venda que liberou o vídeo (up2/ds2/ds3) no PedidoVideoEs.
-    prisma.pedidoEs.count({ where: { status: "pago", rastreado: false } }),
+    prisma.pedidoEs.count({ where: WHERE_SEM_RASTREIO }),   // qualquer oferta paga sem rastreio
     prisma.pedidoEs.count({ where: { status: "pago", video: { is: { rastreado: false } } } }),
   ]);
 

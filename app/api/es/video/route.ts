@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TOKEN_RE, validarFotos } from "@/lib/video";
+import { dispararProducaoVideoEs } from "@/lib/video-es-producao";
 
 /*
   API da tabela PedidoVideoEs pras páginas /fotos-es e /video-es.
@@ -101,7 +102,10 @@ export async function POST(req: NextRequest) {
       where: { token: t },
       data: { fotos: v.fotos, opcoes, fotos_em: new Date(), producao: "fotos_enviadas", erro_msg: null },
     });
-    return NextResponse.json({ success: true, producao: atualizado.producao, fotos_qtd: v.fotos.length });
+    // Fotos chegaram: se a música já está pronta, o vídeo entra em produção agora.
+    // Senão, quem dispara é o music_ready (ver lib/video-es-producao.ts).
+    const producao_disparo = await dispararProducaoVideoEs(atualizado.pedido_id);
+    return NextResponse.json({ success: true, producao: atualizado.producao, fotos_qtd: v.fotos.length, producao_disparo });
   }
 
   if (acao === "refazer") {

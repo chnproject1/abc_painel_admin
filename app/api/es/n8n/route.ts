@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { liberacoes } from "@/lib/es-ofertas";
+import { marcarRastreio } from "@/lib/es-rastreio";
+import { dispararProducaoVideoEs, refazerVideoEs, dispararPaginaEs } from "@/lib/video-es-producao";
 
 /**
  * Callbacks das automações da operação ES (LATAM) (model PedidoEs).
@@ -78,6 +80,10 @@ async function acaoVideo(action: string, id: string, data: any) {
       token: video.token,
       link: linkFotosEs(video.token),          // página de fotos
       ver_link: linkVerVideoEs(video.token),   // página do vídeo pronto (vai no e-mail)
+      /* Sempre 'pago': no ES a linha de vídeo só nasce quando a venda libera o
+         vídeo (up2, ds2 ou ds3). Vai no corpo porque o nó "Checar" do fluxo é
+         o mesmo do BR e exige status === 'pago'. */
+      status: "pago",
       producao: video.producao,
       nome: video.pedido.nome,
       email: video.pedido.email,
@@ -98,9 +104,11 @@ async function acaoVideo(action: string, id: string, data: any) {
   // TikTok. Chamado pelos fluxos do up2 e do downsell quando `entregaveis`
   // inclui 'video'. Reenviar é inofensivo: devolve ja_estava.
   if (action === "video_rastreado") {
-    if (video.rastreado) return NextResponse.json({ success: true, ja_estava: true, message: "Já estava marcado como rastreado" });
-    await prisma.pedidoVideoEs.update({ where: { pedido_id: id }, data: { rastreado: true } });
-    return NextResponse.json({ success: true, ja_estava: false, message: "Venda do vídeo marcada como rastreada" });
+    // Compatibilidade: marca também a OFERTA que liberou o vídeo (up2, ou o
+    // downsell ds2/ds3) — é por ela que o painel conta "sem rastreio".
+    const oferta = video.pedido.up2_status === "pago" ? "up2" : "ds";
+    const r = await marcarRastreio(id, oferta, true);
+    return NextResponse.json({ ...r, oferta });
   }
 
   let update: any;
@@ -189,6 +197,13 @@ export async function POST(req: NextRequest) {
   let update: any;
   let mensagem: string;
 
+  /* A música que já estava gravada, pra saber se este music_ready é a primeira
+     geração ou uma REGENERAÇÃO (link_audio diferente). Na regeneração a página
+     Premium ganha link novo e o vídeo precisa ser refeito com o MP3 novo. */
+  const antes = action === "music_ready"
+    ? await prisma.pedidoEs.findUnique({ where: { id }, select: { link_audio: true } })
+    : null;
+
   switch (action) {
     /* ── Fluxo 1: venda inicial (música 1) ── */
 
@@ -275,18 +290,12 @@ export async function POST(req: NextRequest) {
       mensagem = "Erro de geração das músicas extras registrado";
       break;
 
-    /* ── Rastreio: venda da frente registrada na UTMify/Meta/TikTok ── */
-
-    case "rastreado": {
-      const atual = await prisma.pedidoEs.findUnique({ where: { id }, select: { rastreado: true } });
-      if (atual?.rastreado && data.rastreado !== false) {
-        return NextResponse.json({ success: true, ja_estava: true, message: "Já estava marcado como rastreado" });
-      }
-      // `rastreado: false` no corpo desmarca (pra reprocessar uma venda)
-      update = { rastreado: data.rastreado === false ? false : true };
-      mensagem = update.rastreado ? "Venda marcada como rastreada" : "Rastreio desmarcado";
-      break;
-    }
+    /* ── Rastreio: venda registrada na UTMify/Meta/TikTok, POR OFERTA ──
+       { action: "rastreado", id, oferta: "front"|"up1"|"up2"|"ds1"|"ds2"|"ds3" }
+       Sem `oferta` = frente (compatível com o fluxo antigo).
+       `rastreado: false` no corpo desmarca (pra reprocessar). */
+    case "rastreado":
+      return NextResponse.json(await marcarRastreio(id, String(data.oferta || "front"), data.rastreado !== false));
 
     default:
       return NextResponse.json({ success: false, error: "action não tratada" }, { status: 400 });
@@ -308,7 +317,22 @@ export async function POST(req: NextRequest) {
     // Repetido aqui para o fluxo poder ramificar sem consultar o checkout de novo
     const lib = liberacoes(pedido);
 
-    return NextResponse.json({ success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video });
+    /* Música pronta → ofertas que dependem dela (ver lib/video-es-producao.ts):
+         1ª geração:  vídeo sai se as fotos já chegaram; página sai se já foi comprada
+         regeneração: vídeo refeito com as mesmas fotos; página reenviada com o link novo */
+    let video_disparo: string | undefined;
+    let pagina_disparo: string | undefined;
+    if (action === "music_ready") {
+      const novo = txt(data.link_audio);
+      const regenerada = Boolean(antes?.link_audio && novo && novo !== antes.link_audio);
+      if (lib.video)  video_disparo  = regenerada ? await refazerVideoEs(id) : await dispararProducaoVideoEs(id);
+      if (lib.pagina) pagina_disparo = await dispararPaginaEs(id, regenerada);
+    }
+
+    return NextResponse.json({
+      success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video,
+      ...(video_disparo ? { video_disparo } : {}), ...(pagina_disparo ? { pagina_disparo } : {}),
+    });
   } catch (e: any) {
     if (e?.code === "P2025") {
       // Sintoma clássico de ter apontado o nó para a operação errada

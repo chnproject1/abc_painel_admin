@@ -56,7 +56,11 @@ interface PedidoEs {
   up2_valor?: string;
   ds_valor?: string;
 
-  rastreado?: boolean;   // só vem pro admin
+  // Rastreio por oferta (UTMify/Meta/TikTok) — só vem pro admin
+  rastreado?: boolean;
+  up1_rastreado?: boolean;
+  up2_rastreado?: boolean;
+  ds_rastreado?: boolean;
 
   // Vídeo (upsell 2 / downsell com vídeo): só existe em pedido novo (LATAM)
   video?: {
@@ -228,17 +232,12 @@ export default function PedidoEsPage() {
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Funil de ofertas</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)} />
-            <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} />
-            <OfertaBox titulo="Upsell 2"      descricao={temExtras ? "Músicas 2 e 3" : "Vídeo com fotos"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} />
-            <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} />
+            {/* Rastreio por oferta: cada uma é um pedido próprio na UTMify. Só admin. */}
+            <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)}     rastreado={isAdmin ? pedido.rastreado : undefined} />
+            <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
+            <OfertaBox titulo="Upsell 2"      descricao={temExtras ? "Músicas 2 e 3" : "Vídeo com fotos"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
+            <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} rastreado={isAdmin ? pedido.ds_rastreado : undefined} />
           </div>
-          {/* Rastreio da venda da frente — diagnóstico de operação, só admin (igual ao BR) */}
-          {isAdmin && pedido.status === "pago" && (
-            <p className={`text-xs font-medium mt-4 ${pedido.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
-              {pedido.rastreado ? "✓ Venda da frente registrada na UTMify" : "Venda da frente ainda não registrada na UTMify (sem rastreio)"}
-            </p>
-          )}
         </section>
 
         {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não
@@ -595,9 +594,11 @@ function Acao({
 }
 
 function OfertaBox({
-  titulo, descricao, status, valor,
+  titulo, descricao, status, valor, rastreado,
 }: {
   titulo: string; descricao: string; status?: string | null; valor?: string | null;
+  /** undefined = não mostra (operador, ou pedido antigo sem o campo) */
+  rastreado?: boolean;
 }) {
   const cor =
     status === "pago"       ? "border-avocado-300 bg-avocado-50"
@@ -611,6 +612,12 @@ function OfertaBox({
       <p className="text-[11px] text-gray-500 mb-1.5">{descricao}</p>
       <p className="text-sm font-medium text-gray-800">{status ?? "não optado"}</p>
       {valor && <p className="text-xs text-gray-500 tabular-nums mt-0.5">{valor}</p>}
+      {/* Só faz sentido pra oferta paga: é ela que vira pedido na UTMify */}
+      {status === "pago" && rastreado !== undefined && (
+        <p className={`text-[11px] font-medium mt-1.5 ${rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+          {rastreado ? "✓ UTMify" : "Sem rastreio"}
+        </p>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { WHERE_VIDEO_LIBERADO } from "@/lib/es-ofertas";
+import { WHERE_VIDEO_LIBERADO, WHERE_SEM_RASTREIO } from "@/lib/es-ofertas";
 import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 const LIMIT = 50;
@@ -69,9 +69,8 @@ export async function GET(req: NextRequest) {
       break;
     }
     // Rastreio: venda paga ainda não registrada na UTMify/Meta/TikTok
-    case "rastreio":
-      where.status = "pago";
-      where.rastreado = false;
+    case "rastreio":   // alguma oferta paga (frente, up1, up2 ou ds) ainda sem rastreio
+      Object.assign(where, WHERE_SEM_RASTREIO);
       break;
     case "video_rastreio":
       where.status = "pago";

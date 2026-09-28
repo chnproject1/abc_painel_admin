@@ -264,10 +264,15 @@ model PedidoEs {
   pixel_id      String?
   ip            String?
 
-  // Venda da frente (silver | basic) registrada na UTMify/Meta/TikTok.
-  // Marcado pelo n8n com action 'rastreado' em /api/es/n8n. A venda do
-  // vídeo tem o próprio campo, em PedidoVideoEs.
-  rastreado     Boolean @default(false)
+  // Rastreio POR OFERTA: a venda foi registrada na UTMify/Meta/TikTok. Cada
+  // oferta é um pedido próprio na UTMify (<id>, <id>_up1, _up2, _ds1…), então
+  // cada uma precisa do seu campo — senão um up1 que não entrou fica invisível.
+  // Marcado pelo fluxo de rastreio: action 'rastreado' com `oferta`
+  // (front | up1 | up2 | ds1 | ds2 | ds3) em /api/es/n8n.
+  rastreado     Boolean @default(false)   // frente (silver | basic)
+  up1_rastreado Boolean @default(false)
+  up2_rastreado Boolean @default(false)
+  ds_rastreado  Boolean @default(false)   // ds1, ds2 ou ds3 (um só por pedido)
 
   // Cookies e user-agent do navegador. Pesam mais que o fbclid no pareamento
   // do Meta CAPI e do TikTok Events API — o fbc remontado a partir do fbclid

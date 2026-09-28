@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe } from "@/lib/es-ofertas";
+import { avisarVideoLiberadoEs, dispararPaginaEs } from "@/lib/video-es-producao";
+import { marcarRastreio } from "@/lib/es-rastreio";
 
 /**
  * Entrada de pedidos da operação ES (LATAM) (model PedidoEs).
@@ -175,6 +177,8 @@ async function garantirVideo(id: string, ofertas: { up1_status?: string | null; 
   let v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: id }, select: { token: true, producao: true, video_path: true } });
   if (!v) {
     v = await prisma.pedidoVideoEs.create({ data: { pedido_id: id, token: gerarToken() }, select: { token: true, producao: true, video_path: true } });
+    // Vídeo acabou de ser liberado: e-mail com o link das fotos, na hora
+    await avisarVideoLiberadoEs(id, v.token);
   }
   return { video_token: v.token, video_link: linkFotosEs(v.token), video_producao: v.producao, video_ver_link: linkVerVideoEs(v.token), video_url: urlPublica(v.video_path) };
 }
@@ -296,6 +300,12 @@ export async function GET(req: NextRequest) {
       fbp:          p.fbp,
       ttp:          p.ttp,
       user_agent:   p.user_agent,
+
+      // Rastreio por oferta (UTMify/Meta/TikTok) — o fluxo pode checar antes de reenviar
+      rastreado:     p.rastreado,
+      up1_rastreado: p.up1_rastreado,
+      up2_rastreado: p.up2_rastreado,
+      ds_rastreado:  p.ds_rastreado,
     },
   });
 }
@@ -368,16 +378,10 @@ export async function POST(req: NextRequest) {
      Automate) ser copiado trocando só a URL e o segredo. O /api/es/n8n
      aceita a mesma ação. Não passa pelo switch: não mexe em status nem plano. */
   if (data.action === "rastreado") {
-    try {
-      await prisma.pedidoEs.update({
-        where: { id: data.id },
-        data: { rastreado: data.rastreado === false ? false : true },
-      });
-    } catch (e: any) {
-      if (e?.code === "P2025") return ok({ message: "Pedido não encontrado, ignorado" });
-      throw e;
-    }
-    return ok({ message: "Pedido marcado como rastreado" });
+    // `oferta` = front | up1 | up2 | ds1 | ds2 | ds3 (sem ela, a frente) — ver lib/es-rastreio.ts
+    const r = await marcarRastreio(String(data.id), String(data.oferta || "front"), data.rastreado !== false);
+    if (!r.success && /não encontrado/.test(String(r.error))) return ok({ message: "Pedido não encontrado, ignorado" });
+    return NextResponse.json(r, { status: r.success ? 200 : 400 });
   }
 
   /* ── Com action: etapas do funil ── */
@@ -445,6 +449,8 @@ export async function POST(req: NextRequest) {
       },
     });
     const video = await garantirVideo(pedido.id, pedido);
+    // Compra da página acabou de entrar: se a música já existe, envia agora
+    if (!liberacoes(atual).pagina && liberacoes(pedido).pagina) await dispararPaginaEs(pedido.id);
 
     return ok({
       message: `${Object.keys(merge).length} campo(s) atualizado(s)`,
@@ -534,6 +540,8 @@ export async function POST(req: NextRequest) {
 
   const lib = liberacoes(pedido);
   const video = await garantirVideo(pedido.id, pedido);
+  // Compra da página acabou de entrar: se a música já existe, envia agora
+  if (!liberacoes(atual).pagina && lib.pagina) await dispararPaginaEs(pedido.id);
 
   return ok({
     message: `Ação "${data.action}" aplicada`,
