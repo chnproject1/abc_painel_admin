@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         { id: { contains: q, mode: "insensitive" } },
       ],
     },
-    select: selectPorRoleUs(role),
+    select: { ...selectPorRoleUs(role), video: { select: { producao: true, entrega_email: true, erro_msg: true, atualizado_em: true } } },
     orderBy: { criado_em: "desc" },
     take: 50,
   });

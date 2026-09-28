@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WHERE_VIDEO_LIBERADO, WHERE_SEM_RASTREIO } from "@/lib/es-ofertas";
+import { FILTROS_ES } from "@/lib/es-resumo";
 import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
 
 const LIMIT = 50;
@@ -20,7 +21,12 @@ export async function GET(req: NextRequest) {
 
   const where: Record<string, unknown> = {};
 
-  switch (filtro) {
+  /* Chaves da visão geral nova (lib/es-resumo.ts): a MESMA regra que conta o
+     número monta a lista, pra o quadro e a lista nunca discordarem. */
+  const regra = filtro ? FILTROS_ES[filtro] : undefined;
+  if (regra) where.AND = [regra()];
+
+  switch (regra ? "" : filtro) {
     case "pagos":
       where.status = "pago";
       break;
@@ -137,6 +143,8 @@ export async function GET(req: NextRequest) {
         data_pedido: true,
         entrega_email: true,
         up_entrega_email: true,
+        // Resumo do vídeo pro selo "🎬 Vídeo: …" do card (igual ao BR)
+        video: { select: { producao: true, entrega_email: true, erro_msg: true, atualizado_em: true } },
       },
       orderBy: { data_pedido: "asc" },
       skip: (page - 1) * LIMIT,

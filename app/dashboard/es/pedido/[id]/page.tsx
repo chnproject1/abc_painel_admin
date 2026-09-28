@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { liberacoes, dsTipoDe, DS_ROTULO } from "@/lib/es-ofertas";
-import { PRODUCAO_LABEL, VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { PRODUCAO_LABEL, estadoVideoEs as estadoVideoEs_ } from "@/lib/video-estado";
 
 interface PedidoEs {
   id: string;
@@ -198,7 +198,7 @@ export default function PedidoEsPage() {
   // se isso acontece, o checkout registrou o upsell mas não a confirmação.
   const ofertaPaga = entregaPagina || lib.video || temExtras;
   const vendaInconsistente = ofertaPaga && pedido.status !== "pago";
-  const estadoVideoEs = temVideo ? estadoDoVideo(pedido.video!) : null;
+  const estadoVideoEs = temVideo ? estadoVideoEs_(pedido.video!) : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -510,24 +510,6 @@ export default function PedidoEsPage() {
 
 /* ── Sub-componentes ── */
 
-/* Estado do vídeo ES, mesma leitura do BR (lib/video-estado.ts) sem a parte da venda:
-   aqui todo vídeo já está pago. */
-function estadoDoVideo(v: NonNullable<PedidoEs["video"]>) {
-  const cinza = "bg-gray-100 text-gray-600", verde = "bg-green-100 text-green-700", amarelo = "bg-yellow-100 text-yellow-800",
-        vermelho = "bg-red-100 text-red-700", azul = "bg-blue-100 text-blue-700";
-  const min = (d?: string | null) => { if (!d) return null; const t = new Date(d).getTime(); return isNaN(t) ? null : Math.round((Date.now() - t) / 60000); };
-  if (v.producao === "aguardando_fotos") return { chave: "sem_fotos", rotulo: "Sem fotos", detalhe: "O cliente ainda não enviou as fotos. O link da página de fotos vai no e-mail da música.", cor: cinza };
-  if (v.producao === "erro") return { chave: "erro", rotulo: "Erro de geração", detalhe: v.erro_msg ? `O render falhou: ${v.erro_msg}` : "O render falhou.", cor: vermelho };
-  if (v.producao === "concluido") {
-    if (v.entrega_email) return { chave: "entregue", rotulo: "Entregue", detalhe: "Vídeo pronto e e-mail enviado.", cor: verde };
-    return { chave: "pendente_envio", rotulo: "Pendente envio", detalhe: "Vídeo pronto, mas o e-mail não saiu.", cor: amarelo };
-  }
-  const m = min(v.atualizado_em);
-  if (m !== null && m > VIDEO_TRAVADO_MIN) {
-    return { chave: "erro", rotulo: "Erro de geração", detalhe: v.producao === "renderizando" ? `Travado em "renderizando" há ${m} min.` : `Na fila há ${m} min e o render nunca começou.`, cor: vermelho };
-  }
-  return { chave: "renderizando", rotulo: v.producao === "renderizando" ? "Renderizando" : "Aguardando render", detalhe: v.producao === "renderizando" ? "O vídeo está sendo feito agora." : "Fotos recebidas, esperando o render começar.", cor: azul };
-}
 
 /** Uma linha de entrega, com os três estados que o pedido pode ter. */
 function Entrega({

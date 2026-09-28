@@ -65,17 +65,19 @@ export function montarPlanoEs(tier: string, o: OfertasEs): string {
 
 /* Cláusulas Prisma equivalentes a `liberacoes().video`, pra stats e lista:
    comprou o up2, OU pagou um downsell que incluía o vídeo. */
+/* "Não pago" com o vazio incluído: `NOT: { up2_status: "pago" }` deixava de
+   fora quem tem up2_status NULL (fechou a página antes do fim do funil). */
 export const WHERE_VIDEO_LIBERADO = {
   OR: [
     { up2_status: "pago" },
-    { ds_status: "pago", NOT: { up2_status: "pago" } },
+    { ds_status: "pago", OR: [{ up2_status: null }, { up2_status: { not: "pago" } }] },
   ],
 };
 
 export const WHERE_PAGINA_LIBERADA = {
   OR: [
     { up1_status: "pago" },
-    { ds_status: "pago", NOT: { up1_status: "pago" } },
+    { ds_status: "pago", OR: [{ up1_status: null }, { up1_status: { not: "pago" } }] },
   ],
 };
 

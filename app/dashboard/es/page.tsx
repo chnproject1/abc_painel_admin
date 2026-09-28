@@ -4,6 +4,8 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import SeletorPais from "@/components/SeletorPais";
+import { estadoVideoEs, type VideoResumoEs } from "@/lib/video-estado";
+import { ROTULO_FILTRO_ES } from "@/lib/es-resumo";
 
 interface PedidoEs {
   id: string;
@@ -23,21 +25,17 @@ interface PedidoEs {
   data_pedido?: string;
   entrega_email?: boolean;
   up_entrega_email?: boolean;
+  video?: VideoResumoEs | null;   // só pedido novo (LATAM) com vídeo comprado
 }
 
-interface Stats {
-  total: number;
-  pagos: number;
-  up1: number;
-  up2: number;
-  ds: number;
-  pendentes_envio: number;
-  erro_geracao: number;
-  pendentes_envio_up: number;
-  erro_geracao_up: number;
-  pendentes_rastreio: number;
-  receita: { inicial: number; up1: number; up2: number; ds: number; total: number };
-  video?: { total: number; sem_fotos: number; pendentes_envio: number; erro: number; entregues: number; sem_rastreio: number };
+/* Resposta de /api/es/resumo (regras em lib/es-resumo.ts) */
+interface ResumoEs {
+  entregas: {
+    musica: { compraram: number; producao: number; pendente: number; entregue: number; erro: number };
+    pagina: { compraram: number; aguardando: number; pendente: number; entregue: number };
+    video:  { compraram: number; aguardando: number; producao: number; pendente: number; entregue: number; erro: number };
+  };
+  rastreio: { oferta: string; rotulo: string; vendas: number; rastreadas: number; sem_rastreio: number; receita: number }[];
 }
 
 const STATUS_COR: Record<string, string> = {
@@ -67,22 +65,155 @@ const FILTRO_LABEL: Record<string, string> = {
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-function StatCard({
-  label, value, cor, ativo, onClick,
+/* Célula clicável das tabelas da visão geral: abre a lista com a MESMA regra
+   que contou o número. Zero fica cinza; pendência amarela; erro vermelho.
+   `valor` undefined = a coluna não se aplica àquele produto (—). */
+function Num({
+  valor, chave, tom = "neutro", ativo, onClick,
 }: {
-  label: string; value: number; cor: string; ativo: boolean; onClick: () => void;
+  valor?: number; chave?: string; tom?: "neutro" | "pendencia" | "erro" | "ok";
+  ativo: string | null; onClick: (chave: string) => void;
 }) {
+  if (valor === undefined) return <td className="px-3 py-2.5 text-right text-gray-300">—</td>;
+  const zero = valor === 0;
+  const cor = zero ? "text-gray-300"
+    : tom === "erro"      ? "bg-red-50 text-red-700 font-semibold"
+    : tom === "pendencia" ? "bg-yellow-50 text-yellow-800 font-semibold"
+    : tom === "ok"        ? "text-avocado-700"
+    : "text-gray-800";
+  const clicavel = !!chave && !zero;
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-xl border p-4 flex flex-col gap-1 text-left w-full transition-all hover:opacity-90 ${cor} ${
-        ativo ? "ring-2 ring-offset-2 ring-current shadow-md" : "hover:shadow-sm"
-      }`}
-    >
-      <p className="text-xs font-medium uppercase tracking-wide opacity-70 leading-tight">{label}</p>
-      <p className="text-3xl font-bold tabular-nums">{value.toLocaleString("pt-BR")}</p>
-      <p className="text-xs opacity-50 mt-1">ver lista →</p>
-    </button>
+    <td className="px-1 py-1 text-right">
+      <button
+        type="button"
+        disabled={!clicavel}
+        onClick={() => chave && onClick(chave)}
+        className={`w-full rounded-md px-2 py-1.5 tabular-nums text-sm transition-colors ${cor} ${clicavel ? "hover:ring-1 hover:ring-gray-300" : "cursor-default"} ${ativo === chave ? "ring-2 ring-gray-500" : ""}`}
+      >
+        {valor.toLocaleString("pt-BR")}
+      </button>
+    </td>
+  );
+}
+
+function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null; onClick: (chave: string) => void }) {
+  const { musica, pagina, video } = r.entregas;
+  const semRastreio = r.rastreio.filter(x => x.sem_rastreio > 0);
+  const totalSemRastreio = semRastreio.reduce((t, x) => t + x.sem_rastreio, 0);
+
+  /* Só o que é trabalho da operação. "Aguardando" (fotos do cliente, música
+     ficar pronta) e "em produção" são o fluxo andando, não pendência. */
+  const atencao: { chave: string; texto: string; erro?: boolean }[] = [];
+  if (musica.erro)      atencao.push({ chave: "musica_erro", texto: `${musica.erro} música(s) com erro de geração`, erro: true });
+  if (musica.pendente)  atencao.push({ chave: "musica_pendente", texto: `${musica.pendente} música(s) sem entregar` });
+  if (pagina.pendente)  atencao.push({ chave: "pagina_pendente", texto: `${pagina.pendente} página(s) sem entregar` });
+  if (video.erro)       atencao.push({ chave: "video_erro", texto: `${video.erro} vídeo(s) com erro`, erro: true });
+  if (video.pendente)   atencao.push({ chave: "video_pendentes", texto: `${video.pendente} vídeo(s) pendente(s) de envio` });
+  if (totalSemRastreio) atencao.push({ chave: "rastreio", texto: `${totalSemRastreio} venda(s) sem rastreio (${semRastreio.map(x => `${x.oferta}: ${x.sem_rastreio}`).join(" · ")})` });
+
+  const th = "px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400 whitespace-nowrap";
+  const thNome = "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400";
+  const nomeLinha = "px-3 py-2.5 text-sm text-gray-700 whitespace-nowrap";
+  const totalVendas = r.rastreio.reduce((t, x) => t + x.vendas, 0);
+  const totalRastreadas = r.rastreio.reduce((t, x) => t + x.rastreadas, 0);
+  const receitaTotal = r.rastreio.reduce((t, x) => t + x.receita, 0);
+
+  return (
+    <div className="mb-6 space-y-4">
+      {/* Precisa de atenção */}
+      <div className={`rounded-xl border p-4 ${atencao.length ? "bg-yellow-50 border-yellow-200" : "bg-avocado-50 border-avocado-200"}`}>
+        {atencao.length === 0 ? (
+          <p className="text-sm font-medium text-avocado-700">✓ Tudo entregue e rastreado.</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-yellow-900 mr-1">⚠ Precisa de atenção</span>
+            {atencao.map(a => (
+              <button key={a.chave} type="button" onClick={() => onClick(a.chave)}
+                className={`text-sm px-2.5 py-1 rounded-full border transition-colors ${a.erro ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100" : "bg-white border-yellow-300 text-yellow-900 hover:bg-yellow-100"} ${ativo === a.chave ? "ring-2 ring-gray-500" : ""}`}>
+                {a.texto}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Entregas — por produto */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Entregas · o que o cliente recebe</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
+            <thead><tr className="border-b border-gray-100">
+              <th className={thNome}>Produto</th>
+              <th className={th}>Compraram</th><th className={th}>Aguardando</th><th className={th}>Em produção</th>
+              <th className={th}>Pendente envio</th><th className={th}>Entregue</th><th className={th}>Erro</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              <tr>
+                <td className={nomeLinha}>🎵 Música</td>
+                <Num valor={musica.compraram} chave="musica" ativo={ativo} onClick={onClick} />
+                <Num ativo={ativo} onClick={onClick} />
+                <Num valor={musica.producao} chave="musica_producao" ativo={ativo} onClick={onClick} />
+                <Num valor={musica.pendente} chave="musica_pendente" tom="pendencia" ativo={ativo} onClick={onClick} />
+                <Num valor={musica.entregue} chave="musica_entregue" tom="ok" ativo={ativo} onClick={onClick} />
+                <Num valor={musica.erro} chave="musica_erro" tom="erro" ativo={ativo} onClick={onClick} />
+              </tr>
+              <tr>
+                <td className={nomeLinha}>✨ Página Premium <span className="text-gray-400 text-xs">up1 · ds1 · ds3</span></td>
+                <Num valor={pagina.compraram} chave="pagina" ativo={ativo} onClick={onClick} />
+                <Num valor={pagina.aguardando} chave="pagina_aguardando" ativo={ativo} onClick={onClick} />
+                <Num ativo={ativo} onClick={onClick} />
+                <Num valor={pagina.pendente} chave="pagina_pendente" tom="pendencia" ativo={ativo} onClick={onClick} />
+                <Num valor={pagina.entregue} chave="pagina_entregue" tom="ok" ativo={ativo} onClick={onClick} />
+                <Num ativo={ativo} onClick={onClick} />
+              </tr>
+              <tr>
+                <td className={nomeLinha}>🎬 Vídeo <span className="text-gray-400 text-xs">up2 · ds2 · ds3</span></td>
+                <Num valor={video.compraram} chave="video" ativo={ativo} onClick={onClick} />
+                <Num valor={video.aguardando} chave="video_sem_fotos" ativo={ativo} onClick={onClick} />
+                <Num valor={video.producao} chave="video_producao" ativo={ativo} onClick={onClick} />
+                <Num valor={video.pendente} chave="video_pendentes" tom="pendencia" ativo={ativo} onClick={onClick} />
+                <Num valor={video.entregue} chave="video_entregue" tom="ok" ativo={ativo} onClick={onClick} />
+                <Num valor={video.erro} chave="video_erro" tom="erro" ativo={ativo} onClick={onClick} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-gray-400 px-4 py-2 border-t border-gray-50">
+          Aguardando: a página espera a música ficar pronta; o vídeo espera o cliente mandar as fotos.
+        </p>
+      </div>
+
+      {/* Rastreio — por venda */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Rastreio · cada venda é um pedido na UTMify</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px]">
+            <thead><tr className="border-b border-gray-100">
+              <th className={thNome}>Venda</th>
+              <th className={th}>Vendas</th><th className={th}>Rastreadas</th><th className={th}>Sem rastreio</th><th className={th}>Receita</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {r.rastreio.map(x => (
+                <tr key={x.oferta}>
+                  <td className={nomeLinha}>{x.rotulo}</td>
+                  <Num valor={x.vendas} chave={`venda_${x.oferta}`} ativo={ativo} onClick={onClick} />
+                  <Num valor={x.rastreadas} tom="ok" ativo={ativo} onClick={onClick} />
+                  <Num valor={x.sem_rastreio} chave={`sem_rastreio_${x.oferta}`} tom="pendencia" ativo={ativo} onClick={onClick} />
+                  <td className="px-3 py-2.5 text-right text-sm tabular-nums text-gray-800">{usd(x.receita)}</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50">
+                <td className={`${nomeLinha} font-semibold`}>Total</td>
+                <td className="px-3 py-2.5 text-right text-sm tabular-nums font-semibold text-gray-800">{totalVendas.toLocaleString("pt-BR")}</td>
+                <td className="px-3 py-2.5 text-right text-sm tabular-nums text-avocado-700">{totalRastreadas.toLocaleString("pt-BR")}</td>
+                <td className={`px-3 py-2.5 text-right text-sm tabular-nums ${totalSemRastreio ? "font-semibold text-yellow-800" : "text-gray-300"}`}>{totalSemRastreio.toLocaleString("pt-BR")}</td>
+                <td className="px-3 py-2.5 text-right text-sm tabular-nums font-semibold text-gray-800">{usd(receitaTotal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -96,12 +227,19 @@ function Oferta({ label, status }: { label: string; status?: string | null }) {
   return <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${cor}`}>{label}</span>;
 }
 
+/* Card da lista — mesmo desenho do BR (app/dashboard/page.tsx): estado da
+   música, selo do vídeo e "Entregue" à direita. As etiquetas up1/up2/ds são
+   do funil ES. "Músicas extras" só aparece em pedido ANTIGO dos EUA (sem
+   linha de vídeo): no ES o up2/ds é o vídeo, não mais as músicas 2 e 3. */
 function PedidoCard({ p }: { p: PedidoEs }) {
-  const gerada        = p.gerou_musica || !!p.link_audio || !!p.link_pagina;
-  const alertaPago    = p.status === "pago" && !gerada;
-  const naoEntregue   = gerada && !p.entrega_email;
-  const temExtras     = p.up2_status === "pago" || p.ds_status === "pago";
-  const extrasAbertas = temExtras && !p.up_entrega_email;
+  const gerada      = p.gerou_musica || !!p.link_audio || !!p.link_pagina;
+  const alertaPago  = p.status === "pago" && !gerada;
+  const naoEntregue = gerada && !p.entrega_email;
+  const entregue    = !!p.entrega_email;
+
+  // Pedido antigo (EUA): up2/combo eram as duas músicas extras, sem vídeo
+  const extrasAntigas = !p.video && (p.up2_status === "pago" || p.ds_status === "pago");
+  const extrasAbertas = extrasAntigas && !p.up_entrega_email;
 
   const cardClass = alertaPago
     ? "bg-red-50 border-red-200 hover:border-red-400"
@@ -116,7 +254,7 @@ function PedidoCard({ p }: { p: PedidoEs }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 truncate">{p.nome || "(no name)"}</p>
+          <p className="font-semibold text-gray-900 truncate">{p.nome || "(sem nome)"}</p>
           <p className="text-sm text-gray-500 truncate">{p.email?.split("?")[0]}</p>
           <p className="text-sm text-gray-500 mt-1">
             {p.plano && <span className="font-mono text-xs">{p.plano}</span>}
@@ -132,16 +270,17 @@ function PedidoCard({ p }: { p: PedidoEs }) {
           </div>
           {alertaPago    && <p className="text-xs text-red-500 font-medium mt-1">Pago — música não gerada</p>}
           {naoEntregue   && <p className="text-xs text-yellow-600 font-medium mt-1">Música gerada — aguardando entrega</p>}
-          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">Músicas extras compradas — ainda não entregues</p>}
+          {p.video && (() => { const e = estadoVideoEs(p.video); return (
+            <p className="text-xs font-medium mt-1"><span className={`px-1.5 py-0.5 rounded ${e.cor}`}>🎬 Vídeo: {e.rotulo}</span></p>
+          ); })()}
+          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">Músicas extras (pedido antigo) — ainda não entregues</p>}
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_COR[p.status] ?? "bg-gray-100 text-gray-600"}`}>
             {p.status}
           </span>
-          {p.entrega_email && <span className="text-xs text-avocado-600 font-medium">✓ Entregue</span>}
-          {temExtras && p.up_entrega_email && (
-            <span className="text-xs text-avocado-600 font-medium">✓ Extras entregues</span>
-          )}
+          {entregue && <span className="text-xs text-avocado-600 font-medium">✓ Entregue</span>}
+          {gerada && !entregue && <span className="text-xs text-gray-500">Música gerada</span>}
         </div>
       </div>
     </Link>
@@ -161,8 +300,8 @@ function DashboardUsContent() {
   const [erroBusca, setErroBusca]   = useState("");
   const [buscaFeita, setBuscaFeita] = useState(false);
 
-  // Stats
-  const [stats, setStats] = useState<Stats | null>(null);
+  // Visão geral (entregas + rastreio), segue os filtros de data e plano
+  const [resumo, setResumo] = useState<ResumoEs | null>(null);
 
   // Filtro (cards) — estado espelhado na URL
   const [filtroAtivo, setFiltroAtivo] = useState<string | null>(searchParams.get("view"));
@@ -242,13 +381,21 @@ function DashboardUsContent() {
     if (view || plano) { carregarFiltro(view ?? "todos", page, data, desde, ate, plano); }
   }, []);
 
-  // Stats e planos apenas quando a sessão confirmar admin
+  // Planos apenas quando a sessão confirmar admin
   useEffect(() => {
-    if (isAdmin) {
-      fetch("/api/es/stats").then(r => r.json()).then(setStats).catch(() => {});
-      fetch("/api/es/planos").then(r => r.json()).then(setPlanos).catch(() => {});
-    }
+    if (isAdmin) fetch("/api/es/planos").then(r => r.json()).then(setPlanos).catch(() => {});
   }, [isAdmin]);
+
+  // Visão geral: recarrega quando muda o período ou o plano (mesmo formato da lista)
+  useEffect(() => {
+    if (!isAdmin) return;
+    const p = new URLSearchParams();
+    if (filtroData)  p.set("data", filtroData);
+    if (filtroDesde) p.set("desde", `${filtroDesde}:00-04:00`);
+    if (filtroAte)   p.set("ate", `${filtroAte}:00-04:00`);
+    if (filtroPlano) p.set("plano", filtroPlano);
+    fetch(`/api/es/resumo?${p.toString()}`).then(r => (r.ok ? r.json() : null)).then(setResumo).catch(() => {});
+  }, [isAdmin, filtroData, filtroDesde, filtroAte, filtroPlano]);
 
   function handleCardClick(filtro: string) {
     if (filtroAtivo === filtro && !filtroData && !filtroDesde && !filtroAte && !filtroPlano) {
@@ -308,48 +455,8 @@ function DashboardUsContent() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-        {/* Stats clicáveis — apenas admin */}
-        {isAdmin && stats && (
-          <div className="mb-6 space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-                <StatCard label="Total"            value={stats.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
-                <StatCard label="Pagas"            value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
-                <StatCard label="Pendentes envio"  value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
-                <StatCard label="Erro de geração"  value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
-                <StatCard label="Sem rastreio"     value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"     ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
-              </div>
-            </div>
-
-            {/* Vídeo (upsell 2 / downsell com vídeo) */}
-            {stats.video && (
-              <div>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Vídeo com fotos (upsell 2)</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-                  <StatCard label="Compraram"       value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video"}           onClick={() => handleCardClick("video")} />
-                  <StatCard label="Sem fotos"       value={stats.video.sem_fotos}       cor="bg-gray-50 border-gray-200 text-gray-600"      ativo={filtroAtivo === "video_sem_fotos"} onClick={() => handleCardClick("video_sem_fotos")} />
-                  <StatCard label="Pendentes envio" value={stats.video.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "video_pendentes"} onClick={() => handleCardClick("video_pendentes")} />
-                  <StatCard label="Erro de geração" value={stats.video.erro}            cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "video_erro"}      onClick={() => handleCardClick("video_erro")} />
-                  <StatCard label="Sem rastreio"    value={stats.video.sem_rastreio}    cor="bg-blue-50 border-blue-200 text-blue-800"       ativo={filtroAtivo === "video_rastreio"}  onClick={() => handleCardClick("video_rastreio")} />
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Faturamento</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div><p className="text-xs text-gray-400">Venda inicial</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.inicial)}</p></div>
-                <div><p className="text-xs text-gray-400">Upsell 1</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.up1)}</p></div>
-                <div><p className="text-xs text-gray-400">Upsell 2 · Vídeo</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.up2)}</p></div>
-                <div><p className="text-xs text-gray-400">Downsell</p><p className="text-lg font-semibold text-gray-800 tabular-nums">{usd(stats.receita.ds)}</p></div>
-              </div>
-              <p className="text-sm text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                Total: <span className="font-semibold text-gray-800 tabular-nums">{usd(stats.receita.total)}</span>
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Visão geral — apenas admin */}
+        {isAdmin && resumo && <VisaoGeralEs r={resumo} ativo={filtroAtivo} onClick={handleCardClick} />}
 
         {/* Busca */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
@@ -456,7 +563,7 @@ function DashboardUsContent() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm font-semibold text-gray-700">
-                  {filtroAtivo ? FILTRO_LABEL[filtroAtivo] : "Todos os pedidos"}
+                  {filtroAtivo ? (FILTRO_LABEL[filtroAtivo] ?? ROTULO_FILTRO_ES[filtroAtivo] ?? filtroAtivo) : "Todos os pedidos"}
                   {filtroPlano && <span className="ml-2 font-mono text-xs text-gray-500">— {filtroPlano}</span>}
                 </p>
                 {!carregandoFiltro && (

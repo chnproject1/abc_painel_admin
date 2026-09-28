@@ -92,3 +92,31 @@ export const PRODUCAO_LABEL: Record<string, string> = {
   concluido:        "Concluído",
   erro:             "Erro",
 };
+
+/* ── Operação ES (PedidoVideoEs) ──────────────────────────────────────
+   Mesma leitura do BR sem a parte da venda: no ES a linha de vídeo só existe
+   quando o vídeo já foi pago (up2, ds2 ou ds3). Entrega por e-mail. Usado na
+   lista (/dashboard/es) e na página do pedido ES. */
+export type VideoResumoEs = {
+  producao: string;
+  entrega_email: boolean;
+  erro_msg?: string | null;
+  atualizado_em?: string | Date | null;
+};
+
+export function estadoVideoEs(v: VideoResumoEs): EstadoVideo {
+  const cinza = "bg-gray-100 text-gray-600", verde = "bg-green-100 text-green-700", amarelo = "bg-yellow-100 text-yellow-800",
+        vermelho = "bg-red-100 text-red-700", azul = "bg-blue-100 text-blue-700";
+  const min = (d?: string | Date | null) => { if (!d) return null; const t = new Date(d).getTime(); return isNaN(t) ? null : Math.round((Date.now() - t) / 60000); };
+  if (v.producao === "aguardando_fotos") return { chave: "sem_fotos", rotulo: "Sem fotos", detalhe: "O cliente ainda não enviou as fotos. O link da página de fotos vai no e-mail “Sube tus fotos”.", cor: cinza };
+  if (v.producao === "erro") return { chave: "erro", rotulo: "Erro de geração", detalhe: v.erro_msg ? `O render falhou: ${v.erro_msg}` : "O render falhou.", cor: vermelho };
+  if (v.producao === "concluido") {
+    if (v.entrega_email) return { chave: "entregue", rotulo: "Entregue", detalhe: "Vídeo pronto e e-mail enviado.", cor: verde };
+    return { chave: "pendente_envio", rotulo: "Pendente envio", detalhe: "Vídeo pronto, mas o e-mail não saiu.", cor: amarelo };
+  }
+  const m = min(v.atualizado_em);
+  if (m !== null && m > VIDEO_TRAVADO_MIN) {
+    return { chave: "erro", rotulo: "Erro de geração", detalhe: v.producao === "renderizando" ? `Travado em "renderizando" há ${m} min.` : `Na fila há ${m} min e o render nunca começou.`, cor: vermelho };
+  }
+  return { chave: "renderizando", rotulo: v.producao === "renderizando" ? "Renderizando" : "Aguardando render", detalhe: v.producao === "renderizando" ? "O vídeo está sendo feito agora." : "Fotos recebidas, esperando o render começar.", cor: azul };
+}
