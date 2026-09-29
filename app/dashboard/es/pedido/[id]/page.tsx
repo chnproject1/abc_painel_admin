@@ -66,6 +66,7 @@ interface PedidoEs {
   video?: {
     producao: string; entrega_email: boolean; erro_msg?: string | null; fotos_qtd: number; tentativas: number;
     rastreado?: boolean;
+    envio_confirmacao?: boolean; envio_confirmacao_em?: string | null;
     aberto_em?: string | null; fotos_em?: string | null; concluido_em?: string | null; entregue_em?: string | null;
     atualizado_em?: string | null; criado_em?: string | null;
     link: string; ver_link: string; video_url?: string | null;
@@ -157,7 +158,7 @@ export default function PedidoEsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao acionar");
-      mostrarToast("ok", "Fluxo acionado no n8n.");
+      mostrarToast("ok", tipo === "envio" || tipo === "confirmacao_video" ? "Enviado ao cliente." : "Enviado para produção.");
     } catch (e: any) {
       mostrarToast("erro", e.message || "Erro ao acionar o fluxo.");
     } finally {
@@ -287,70 +288,6 @@ export default function PedidoEsPage() {
           </div>
         </section>
 
-        {/* Vídeo (upsell 2 / ds2 / ds3) — mesmo desenho do bloco do BR
-            (app/dashboard/pedido/[id]); a entrega aqui é por e-mail. */}
-        {temVideo && estadoVideoEs && (() => {
-          const v = pedido.video!; const e = estadoVideoEs;
-          const dt = (d?: string | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
-          // Qual venda liberou o vídeo: o upsell 2, ou o downsell (ds2 = só o vídeo, ds3 = página + vídeo)
-          const venda = pedido.up2_status === "pago"
-            ? `Pago · ${usd(pedido.up2_valor) ?? "—"} (upsell 2)`
-            : pedido.ds_status === "pago"
-              ? `Pago · ${usd(pedido.ds_valor) ?? "—"} (${dsTipo ?? "downsell"})`
-              : "Não pagou";
-          return (
-            <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo (upsell)</h2>
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
-              </div>
-              <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <Campo label="Venda" valor={venda} />
-                <Campo label="Produção" valor={PRODUCAO_LABEL[v.producao] ?? v.producao} />
-                <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
-                <Campo label="Entrega e-mail" valor={v.entrega_email ? "✓ Enviado" : "✕ Não enviado"} />
-              </div>
-              {/* Rastreio e linha do tempo são diagnóstico de operação: ficam só
-                  para o admin, igual ao BR. */}
-              {isAdmin && (
-                <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
-                  {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
-                </p>
-              )}
-              {isAdmin && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <Campo label="Pago em" valor={dt(v.criado_em) ?? "—"} />
-                  <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
-                  <Campo label="Fotos em" valor={dt(v.fotos_em) ?? "—"} />
-                  <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                {e.chave === "erro" && (
-                  <button onClick={() => acionar("video")} disabled={!!acionando}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
-                    {acionando === "video" ? "Enviando..." : "🔄 Mandar pra produção de novo"}
-                  </button>
-                )}
-                {v.video_url && (
-                  <a href={`/api/download?url=${encodeURIComponent(v.video_url)}&filename=${encodeURIComponent(`video-${pedido.nome || "cliente"}.mp4`)}`}
-                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-avocado-600 hover:bg-avocado-700 text-white text-sm font-medium transition-colors">
-                    ⬇️ Baixar vídeo
-                  </a>
-                )}
-                {v.video_url && <LinkBtn href={v.ver_link} label="▶️ Ver vídeo" />}
-                <LinkBtn href={v.link} label="🔗 Página de fotos" />
-              </div>
-              {e.chave === "pendente_envio" && (
-                <p className="text-xs text-yellow-800 mt-3">Vídeo pronto e o e-mail não saiu. Use "Enviar ao cliente" ou mande o link da página do vídeo para <span className="font-mono">{pedido.email?.split("?")[0]}</span>.</p>
-              )}
-            </section>
-          );
-        })()}
-
         {/* Cliente + Pedido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <section className="bg-white rounded-xl border border-gray-200 p-5">
@@ -476,13 +413,13 @@ export default function PedidoEsPage() {
 
           <Acao
             titulo="Gerar música principal"
-            descricao="Reenvia para produção e atualiza a música 1 do cliente."
+            descricao="Reenvia para produção e atualiza a música 1 do cliente. Se ele comprou a página ou o vídeo, eles são refeitos e reenviados automaticamente."
             rotulo={acionando === "principal" ? "Gerando..." : "Gerar e enviar"}
             disabled={!!acionando}
             onClick={() => acionar("principal")}
           />
 
-          {temExtras ? (
+          {temExtras && (
             <Acao
               titulo="Gerar músicas extras"
               descricao="Pedido antigo: reenvia para produção e atualiza as músicas 2 e 3."
@@ -490,18 +427,80 @@ export default function PedidoEsPage() {
               disabled={!!acionando}
               onClick={() => acionar("upsell")}
             />
-          ) : (
-            <Acao
-              titulo="Refazer o vídeo"
-              descricao={temVideo
-                ? (pedido.video!.producao === "aguardando_fotos" ? "Indisponível — o cliente ainda não enviou as fotos." : "Renderiza de novo com as fotos já enviadas e reenvia o e-mail.")
-                : "Indisponível — este cliente não comprou o vídeo."}
-              rotulo={acionando === "video" ? "Gerando..." : "Refazer e enviar"}
-              disabled={!!acionando || !temVideo || pedido.video!.producao === "aguardando_fotos"}
-              onClick={() => acionar("video")}
-            />
           )}
         </section>
+
+        {/* Vídeo (upsell 2 / ds2 / ds3) — mesmo desenho do bloco do BR
+            (app/dashboard/pedido/[id]); a entrega aqui é por e-mail. */}
+        {temVideo && estadoVideoEs && (() => {
+          const v = pedido.video!; const e = estadoVideoEs;
+          const dt = (d?: string | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
+          // Qual venda liberou o vídeo: o upsell 2, ou o downsell (ds2 = só o vídeo, ds3 = página + vídeo)
+          const venda = pedido.up2_status === "pago"
+            ? `Pago · ${usd(pedido.up2_valor) ?? "—"} (upsell 2)`
+            : pedido.ds_status === "pago"
+              ? `Pago · ${usd(pedido.ds_valor) ?? "—"} (${dsTipo ?? "downsell"})`
+              : "Não pagou";
+          return (
+            <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo (upsell)</h2>
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
+              </div>
+              <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                <Campo label="Venda" valor={venda} />
+                <Campo label="Confirmação" valor={v.envio_confirmacao ? "✓ Enviada" : v.producao !== "aguardando_fotos" ? "— (já enviou as fotos)" : "✕ Não enviada"} />
+                <Campo label="Produção" valor={PRODUCAO_LABEL[v.producao] ?? v.producao} />
+                <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
+                <Campo label="Entrega e-mail" valor={v.entrega_email ? "✓ Enviado" : "✕ Não enviado"} />
+              </div>
+              {/* Rastreio e linha do tempo são diagnóstico de operação: ficam só
+                  para o admin, igual ao BR. */}
+              {isAdmin && (
+                <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+                  {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
+                </p>
+              )}
+              {isAdmin && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                  <Campo label="Pago em" valor={dt(v.criado_em) ?? "—"} />
+                  <Campo label="Confirmação em" valor={dt(v.envio_confirmacao_em) ?? "—"} />
+                  <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
+                  <Campo label="Fotos em" valor={dt(v.fotos_em) ?? "—"} />
+                  <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {e.chave === "erro" && (
+                  <button onClick={() => acionar("video")} disabled={!!acionando}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
+                    {acionando === "video" ? "Enviando..." : "🔄 Mandar pra produção de novo"}
+                  </button>
+                )}
+                {v.video_url && (
+                  <a href={`/api/download?url=${encodeURIComponent(v.video_url)}&filename=${encodeURIComponent(`video-${pedido.nome || "cliente"}.mp4`)}`}
+                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-avocado-600 hover:bg-avocado-700 text-white text-sm font-medium transition-colors">
+                    ⬇️ Baixar vídeo
+                  </a>
+                )}
+                {v.video_url && <LinkBtn href={v.ver_link} label="▶️ Ver vídeo" />}
+                <LinkBtn href={v.link} label="🔗 Página de fotos" />
+                {v.producao === "aguardando_fotos" && (
+                  <button onClick={() => acionar("confirmacao_video")} disabled={!!acionando}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg disabled:opacity-50 text-sm font-medium transition-colors ${v.envio_confirmacao ? "border border-gray-200 bg-white hover:bg-gray-50 text-gray-700" : "bg-blue-600 hover:bg-blue-700 text-white"}`}>
+                    {acionando === "confirmacao_video" ? "Enviando..." : "📧 Reenviar confirmação"}
+                  </button>
+                )}
+              </div>
+              {e.chave === "pendente_envio" && (
+                <p className="text-xs text-yellow-800 mt-3">Vídeo pronto e o e-mail não saiu. Use "Enviar ao cliente" ou mande o link da página do vídeo para <span className="font-mono">{pedido.email?.split("?")[0]}</span>.</p>
+              )}
+            </section>
+          );
+        })()}
 
       </main>
     </div>

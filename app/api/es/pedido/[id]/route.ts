@@ -25,6 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     producao: v.producao, entrega_email: v.entrega_email, erro_msg: v.erro_msg,
     fotos_qtd: Array.isArray(v.fotos) ? (v.fotos as any[]).length : 0,
     tentativas: v.tentativas, rastreado: v.rastreado,
+    envio_confirmacao: v.envio_confirmacao, envio_confirmacao_em: v.envio_confirmacao_em,
     aberto_em: v.aberto_em, fotos_em: v.fotos_em, concluido_em: v.concluido_em, entregue_em: v.entregue_em,
     atualizado_em: v.atualizado_em, criado_em: v.criado_em,
     link: linkFotosEs(v.token), ver_link: linkVerVideoEs(v.token), video_url: urlPublica(v.video_path),

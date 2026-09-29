@@ -155,6 +155,14 @@ model PedidoVideoEs {
   video_path String? // videos/<token>/final.mp4
 
   entrega_email Boolean @default(false) // e-mail com o link do vídeo saiu
+
+  // E-mail de confirmação da compra ("Sube tus fotos", link da página de
+  // fotos). Marcado pelo fluxo "ES - Envio Confirmação Vídeo" com a action
+  // 'video_confirmacao_enviada' em /api/es/n8n.
+  envio_confirmacao    Boolean   @default(false)
+  envio_confirmacao_em DateTime?
+  envio_confirmacao_tentativas Int @default(0) // pedidos ao n8n; o reenvio automático para em 3
+
   erro_msg      String?
   tentativas    Int     @default(0)
 

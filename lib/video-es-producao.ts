@@ -10,10 +10,18 @@ import { linkFotosEs } from "@/lib/video";
   da música pode levar até 3 dias (plano basic). Sem este e-mail, o link das
   fotos ficava só na tela de obrigado.
 
-  Chamada uma vez só, quando a linha de PedidoVideoEs nasce. Nunca lança.
+  Chamada quando a linha de PedidoVideoEs nasce, pelo botão "Reenviar
+  confirmação" e pelo reenvio automático (/api/es/video/confirmacoes).
+  Quem já mandou as fotos não recebe: o link não serve mais pra nada.
+  Nunca lança.
 */
+export const CONFIRMACAO_MAX_TENTATIVAS = 3;
+
 export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Promise<string> {
   try {
+    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedidoId }, select: { producao: true } });
+    if (v && v.producao !== "aguardando_fotos") return "ja_tem_fotos";
+
     const url = process.env.ES_N8N_FOTOS_WEBHOOK_URL;
     if (!url) {
       console.error("[video-es] ES_N8N_FOTOS_WEBHOOK_URL não configurada — e-mail das fotos não enviado:", pedidoId);
@@ -21,6 +29,10 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
     }
     const p = await prisma.pedidoEs.findUnique({ where: { id: pedidoId }, select: { nome: true, email: true, idioma: true } });
     if (!p?.email) return "sem_email";
+
+    // Conta a tentativa antes de chamar: se o n8n travar, o reenvio
+    // automático não fica tentando pra sempre
+    await prisma.pedidoVideoEs.update({ where: { pedido_id: pedidoId }, data: { envio_confirmacao_tentativas: { increment: 1 } } }).catch(() => {});
 
     const r = await fetch(url, {
       method: "POST",

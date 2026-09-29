@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { avisarVideoLiberadoEs } from "@/lib/video-es-producao";
 
 /**
  * Aciona os fluxos n8n da operação ES (LATAM) a partir do painel.
  *
- *   POST /api/es/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio", "alvo"?: ... }
+ *   POST /api/es/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio" | "video" | "confirmacao_video" }
  *
  * Uma rota só, com o fluxo escolhido pelo `tipo`, porque as três fazem a mesma
  * coisa: confere que o pedido existe em PedidoEs e repassa o id ao webhook.
@@ -56,6 +57,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     body = await req.json();
   } catch {
     // corpo vazio é aceito; cai no padrão abaixo
+  }
+
+  // Reenvia o e-mail da compra do vídeo ("Sube tus fotos") — mesmo link, o
+  // token não muda. Usa o mesmo disparo do checkout (ES_N8N_FOTOS_WEBHOOK_URL).
+  if (body?.tipo === "confirmacao_video") {
+    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: id }, select: { token: true } });
+    if (!v) return NextResponse.json({ error: "Este pedido não tem vídeo (não comprou o upsell 2 nem o downsell com vídeo)" }, { status: 409 });
+    const r = await avisarVideoLiberadoEs(id, v.token);
+    if (r !== "avisado") {
+      const msg = r === "ja_tem_fotos" ? "O cliente já enviou as fotos — não precisa mais do link"
+        : r === "sem_url" ? "Webhook não configurado (falta a variável ES_N8N_FOTOS_WEBHOOK_URL)"
+        : r === "sem_email" ? "Pedido sem e-mail" : `O n8n recusou a chamada (${r})`;
+      return NextResponse.json({ error: msg }, { status: r === "ja_tem_fotos" ? 409 : 502 });
+    }
+    return NextResponse.json({ ok: true, tipo: "confirmacao_video", id });
   }
 
   const tipo: Tipo = body?.tipo ?? "principal";

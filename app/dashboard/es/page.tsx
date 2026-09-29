@@ -33,7 +33,7 @@ interface ResumoEs {
   entregas: {
     musica: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
     pagina: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
-    video:  { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    video:  { compraram: number; sem_confirmacao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
   };
   rastreio: { oferta: string; rotulo: string; vendas: number; rastreadas: number; sem_rastreio: number; receita: number }[];
 }
@@ -88,7 +88,7 @@ function Num({
         type="button"
         disabled={!clicavel}
         onClick={() => chave && onClick(chave)}
-        className={`w-full rounded-md px-2 py-1.5 tabular-nums text-sm transition-colors ${cor} ${clicavel ? "hover:ring-1 hover:ring-gray-300" : "cursor-default"} ${ativo === chave ? "ring-2 ring-gray-500" : ""}`}
+        className={`w-full text-right rounded-md px-2 py-1.5 tabular-nums text-sm transition-colors ${cor} ${clicavel ? "hover:ring-1 hover:ring-gray-300" : "cursor-default"} ${ativo === chave ? "ring-2 ring-gray-500" : ""}`}
       >
         {valor.toLocaleString("pt-BR")}
       </button>
@@ -157,6 +157,7 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
   if (musica.pendente)  atencao.push({ chave: "musica_pendente", texto: `${musica.pendente} música(s) sem entregar` });
   if (pagina.erro)      atencao.push({ chave: "pagina_erro", texto: `${pagina.erro} página(s) travada(s) por erro na música`, erro: true });
   if (pagina.pendente)  atencao.push({ chave: "pagina_pendente", texto: `${pagina.pendente} página(s) sem entregar` });
+  if (video.sem_confirmacao) atencao.push({ chave: "video_sem_confirmacao", texto: `${video.sem_confirmacao} confirmação(ões) de vídeo não enviada(s)` });
   if (video.erro)       atencao.push({ chave: "video_erro", texto: `${video.erro} vídeo(s) com erro`, erro: true });
   if (video.pendente)   atencao.push({ chave: "video_pendentes", texto: `${video.pendente} vídeo(s) pendente(s) de envio` });
   if (totalSemRastreio) atencao.push({ chave: "rastreio", texto: `${totalSemRastreio} venda(s) sem rastreio (${semRastreio.map(x => `${x.oferta}: ${x.sem_rastreio}`).join(" · ")})` });
@@ -218,9 +219,9 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-4 pb-2">Rastreio</p>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px]">
+          <table className="w-full min-w-[520px] table-fixed">
             <thead><tr className="border-b border-gray-100">
-              <th className={thNome}>Venda</th>
+              <th className={`${thNome} w-[32%]`}>Venda</th>
               <th className={th}>Vendas</th><th className={th}>Rastreadas</th><th className={th}>Sem rastreio</th><th className={th}>Receita</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">

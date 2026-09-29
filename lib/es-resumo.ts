@@ -62,6 +62,8 @@ export const FILTROS_ES: Record<string, () => Where> = {
     { producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } },
   ] }),
   video_entregue:   () => video({ entrega_email: true }),
+  // E-mail "Sube tus fotos" não saiu — e ainda faz falta: sem fotos e sem ter aberto o link
+  video_sem_confirmacao: () => video({ envio_confirmacao: false, producao: "aguardando_fotos", aberto_em: null }),
   video_erro:       () => video({ OR: [
     { producao: "erro" },
     { producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { lt: travadoDesde() } },
@@ -101,7 +103,7 @@ export const ROTULO_FILTRO_ES: Record<string, string> = {
   pagina: "Página Premium: compraram", pagina_aguardando: "Página Premium: aguardando a música",
   pagina_pendente: "Página Premium: pendente de envio", pagina_entregue: "Página Premium: entregue", pagina_erro: "Página Premium: erro (música não gerou)",
   video: "Vídeo: compraram", video_sem_fotos: "Vídeo: aguardando fotos", video_producao: "Vídeo: em produção",
-  video_pendentes: "Vídeo: pendente de envio", video_entregue: "Vídeo: entregue", video_erro: "Vídeo: erro",
+  video_pendentes: "Vídeo: pendente de envio", video_entregue: "Vídeo: entregue", video_sem_confirmacao: "Vídeo: confirmação da compra não enviada", video_erro: "Vídeo: erro",
   venda_front: "Vendas da frente", venda_up1: "Vendas do up1", venda_up2: "Vendas do up2",
   venda_ds1: "Vendas do ds1", venda_ds2: "Vendas do ds2", venda_ds3: "Vendas do ds3",
   sem_rastreio_musica: "Música: sem rastreio", sem_rastreio_pagina: "Página Premium: sem rastreio", sem_rastreio_video: "Vídeo: sem rastreio",

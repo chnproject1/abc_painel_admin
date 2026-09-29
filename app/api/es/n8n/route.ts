@@ -59,6 +59,7 @@ function txt(v: any): string | undefined {
 const ACOES_VIDEO = [
   "video_dados", "video_renderizando", "video_concluido", "video_erro",
   "video_entregue", "video_email_erro", "video_regerar", "video_rastreado",
+  "video_confirmacao_enviada",
 ];
 
 async function acaoVideo(action: string, id: string, data: any) {
@@ -133,6 +134,11 @@ async function acaoVideo(action: string, id: string, data: any) {
     case "video_entregue":
       update = { entrega_email: true, entregue_em: new Date() };
       mensagem = "E-mail do vídeo marcado como enviado";
+      break;
+    case "video_confirmacao_enviada":
+      // E-mail da compra ("Sube tus fotos") saiu — fluxo "Envio Confirmação Vídeo"
+      update = { envio_confirmacao: true, envio_confirmacao_em: new Date() };
+      mensagem = "Confirmação do vídeo marcada como enviada";
       break;
     case "video_email_erro":
       update = { entrega_email: false, erro_msg: `e-mail: ${String(data.erro_msg || "falha no envio").slice(0, 900)}` };
