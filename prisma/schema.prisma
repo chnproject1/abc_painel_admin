@@ -282,6 +282,14 @@ model PedidoEs {
   up2_rastreado Boolean @default(false)
   ds_rastreado  Boolean @default(false)   // ds1, ds2 ou ds3 (um só por pedido)
 
+  // Reprocessamento automático (/api/es/reprocessar): vezes que cada etapa
+  // foi disparada de novo. Limite 2 na música (gasta Suno), 3 no resto.
+  reprocesso_musica Int       @default(0)
+  reprocesso_envio  Int       @default(0)
+  reprocesso_pagina Int       @default(0)
+  reprocesso_video  Int       @default(0)
+  reprocesso_em     DateTime?
+
   // Cookies e user-agent do navegador. Pesam mais que o fbclid no pareamento
   // do Meta CAPI e do TikTok Events API — o fbc remontado a partir do fbclid
   // carrega o timestamp do pagamento, não o do clique.

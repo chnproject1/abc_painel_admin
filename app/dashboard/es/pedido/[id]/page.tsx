@@ -61,6 +61,8 @@ interface PedidoEs {
   up1_rastreado?: boolean;
   up2_rastreado?: boolean;
   ds_rastreado?: boolean;
+  reprocesso_musica?: number; reprocesso_envio?: number; reprocesso_pagina?: number; reprocesso_video?: number;
+  reprocesso_em?: string | null;
 
   // Vídeo (upsell 2 / downsell com vídeo): só existe em pedido novo (LATAM)
   video?: {
@@ -286,6 +288,18 @@ export default function PedidoEsPage() {
               />
             )}
           </div>
+          {/* Reprocessamento automático (/api/es/reprocessar) — só admin */}
+          {isAdmin && pedido.reprocesso_em && (() => {
+            const etapas = [
+              ["música", pedido.reprocesso_musica], ["envio", pedido.reprocesso_envio],
+              ["página", pedido.reprocesso_pagina], ["vídeo", pedido.reprocesso_video],
+            ].filter(([, n]) => Number(n) > 0).map(([nome, n]) => `${nome} ${n}×`);
+            return (
+              <p className="text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">
+                🔁 Reprocessado automaticamente: {etapas.join(" · ")} · último em {new Date(pedido.reprocesso_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+              </p>
+            );
+          })()}
         </section>
 
         {/* Cliente + Pedido */}
