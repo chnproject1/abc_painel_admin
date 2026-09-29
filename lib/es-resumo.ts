@@ -32,6 +32,7 @@ const DS3: Where = { ds_status: "pago", AND: [naoPago("up1_status"), naoPago("up
 /* O que o cliente tem direito de receber — mesma regra de liberacoes() */
 const PAGINA: Where = { status: "pago", OR: [{ up1_status: "pago" }, { ds_status: "pago", AND: [naoPago("up1_status")] }] };
 const MUSICA_GERADA: Where = { OR: [{ gerou_musica: true }, { link_audio: { not: null } }] };
+const MUSICA_ERRO: Where = { erro_geracao: true, gerou_musica: false, entrega_email: false };
 
 const video = (is: Where): Where => ({ status: "pago", video: { is } });
 
@@ -42,19 +43,25 @@ export const FILTROS_ES: Record<string, () => Where> = {
   musica_producao: () => ({ status: "pago", gerou_musica: false, link_audio: null, erro_geracao: false }),
   musica_pendente: () => ({ status: "pago", entrega_email: false, AND: [MUSICA_GERADA] }),
   musica_entregue: () => ({ status: "pago", entrega_email: true }),
-  musica_erro:     () => ({ status: "pago", erro_geracao: true, gerou_musica: false, entrega_email: false }),
+  musica_erro:     () => ({ status: "pago", ...MUSICA_ERRO }),
 
   // ── Entregas: Página Premium (up1, ds1, ds3) ──
   pagina:            () => PAGINA,
   pagina_aguardando: () => ({ AND: [PAGINA], link_pagina: null, pagina_entrega_email: false }),   // esperando a música
-  pagina_pendente:   () => ({ AND: [PAGINA], link_pagina: { not: null }, pagina_entrega_email: false }),
+  // Pendente = tudo que não foi entregue (inclusive esperando a música), menos erro
+  pagina_pendente:   () => ({ AND: [PAGINA], pagina_entrega_email: false, NOT: [MUSICA_ERRO] }),
   pagina_entregue:   () => ({ AND: [PAGINA], pagina_entrega_email: true }),
+  pagina_erro:       () => ({ AND: [PAGINA, MUSICA_ERRO], pagina_entrega_email: false }),         // a música não gerou, a página não sai
 
   // ── Entregas: vídeo (up2, ds2, ds3) — só pedido novo tem linha de vídeo ──
   video:            () => ({ status: "pago", video: { isNot: null } }),
   video_sem_fotos:  () => video({ producao: "aguardando_fotos" }),                                  // esperando o cliente
   video_producao:   () => video({ producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } }),
-  video_pendentes:  () => video({ producao: "concluido", entrega_email: false }),
+  // Pendente = tudo que não foi entregue (sem fotos, produzindo, pronto sem e-mail), menos erro
+  video_pendentes:  () => video({ entrega_email: false, OR: [
+    { producao: { in: ["aguardando_fotos", "concluido"] } },
+    { producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } },
+  ] }),
   video_entregue:   () => video({ entrega_email: true }),
   video_erro:       () => video({ OR: [
     { producao: "erro" },
@@ -93,7 +100,7 @@ export const ROTULO_FILTRO_ES: Record<string, string> = {
   musica: "Música: compraram", musica_producao: "Música: em produção", musica_pendente: "Música: pendente de envio",
   musica_entregue: "Música: entregue", musica_erro: "Música: erro de geração",
   pagina: "Página Premium: compraram", pagina_aguardando: "Página Premium: aguardando a música",
-  pagina_pendente: "Página Premium: pendente de envio", pagina_entregue: "Página Premium: entregue",
+  pagina_pendente: "Página Premium: pendente de envio", pagina_entregue: "Página Premium: entregue", pagina_erro: "Página Premium: erro (música não gerou)",
   video: "Vídeo: compraram", video_sem_fotos: "Vídeo: aguardando fotos", video_producao: "Vídeo: em produção",
   video_pendentes: "Vídeo: pendente de envio", video_entregue: "Vídeo: entregue", video_erro: "Vídeo: erro",
   venda_front: "Vendas da frente", venda_up1: "Vendas do up1", venda_up2: "Vendas do up2",

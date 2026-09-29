@@ -32,8 +32,8 @@ interface PedidoEs {
 interface ResumoEs {
   entregas: {
     musica: { compraram: number; producao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
-    pagina: { compraram: number; aguardando: number; pendente: number; entregue: number; sem_rastreio: number };
-    video:  { compraram: number; aguardando: number; producao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    pagina: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    video:  { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
   };
   rastreio: { oferta: string; rotulo: string; vendas: number; rastreadas: number; sem_rastreio: number; receita: number }[];
 }
@@ -97,11 +97,10 @@ function Num({
 }
 
 /* Cores dos cards — as mesmas do painel BR (Total branco, Pagas verde,
-   Pendentes amarelo, Erro vermelho, Sem rastreio azul), mais cinza pra
-   "aguardando" (depende do cliente ou da música) e ciano pra "em produção". */
+   Pendentes amarelo, Erro vermelho, Sem rastreio azul), mais ciano pra
+   "em produção" da música. */
 const COR = {
   total:      "bg-white border-gray-200 text-gray-800",
-  aguardando: "bg-gray-50 border-gray-200 text-gray-600",
   producao:   "bg-sky-50 border-sky-200 text-sky-800",
   pendente:   "bg-yellow-50 border-yellow-200 text-yellow-800",
   entregue:   "bg-green-50 border-green-200 text-green-800",
@@ -134,15 +133,18 @@ function LinhaProduto({
   titulo, detalhe, cards, ativo, onClick,
 }: {
   titulo: string; detalhe?: string; ativo: string | null; onClick: (chave: string) => void;
-  cards: { rotulo: string; valor: number; chave: string; cor: string }[];
+  /* null = coluna vazia, pra cada cor ficar na mesma coluna nas três linhas */
+  cards: ({ rotulo: string; valor: number; chave: string; cor: string } | null)[];
 }) {
   return (
     <div>
       <p className="text-sm font-semibold text-gray-700 mb-2">
         {titulo} {detalhe && <span className="text-xs font-normal text-gray-400">{detalhe}</span>}
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-        {cards.map(c => <MiniCard key={c.chave} {...c} ativo={ativo} onClick={onClick} />)}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {cards.map((c, i) => c
+          ? <MiniCard key={c.chave} {...c} ativo={ativo} onClick={onClick} />
+          : <div key={`vazio-${i}`} className="hidden lg:block" />)}
       </div>
     </div>
   );
@@ -158,6 +160,7 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
   const atencao: { chave: string; texto: string; erro?: boolean }[] = [];
   if (musica.erro)      atencao.push({ chave: "musica_erro", texto: `${musica.erro} música(s) com erro de geração`, erro: true });
   if (musica.pendente)  atencao.push({ chave: "musica_pendente", texto: `${musica.pendente} música(s) sem entregar` });
+  if (pagina.erro)      atencao.push({ chave: "pagina_erro", texto: `${pagina.erro} página(s) travada(s) por erro na música`, erro: true });
   if (pagina.pendente)  atencao.push({ chave: "pagina_pendente", texto: `${pagina.pendente} página(s) sem entregar` });
   if (video.erro)       atencao.push({ chave: "video_erro", texto: `${video.erro} vídeo(s) com erro`, erro: true });
   if (video.pendente)   atencao.push({ chave: "video_pendentes", texto: `${video.pendente} vídeo(s) pendente(s) de envio` });
@@ -192,27 +195,28 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
       {/* Entregas — uma linha de cards por produto, nas cores do BR */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entregas</p>
+        {/* Colunas fixas: Compraram · Em produção · Entregue · Pendente envio · Erro · Sem rastreio */}
         <LinhaProduto titulo="🎵 Música" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: musica.compraram,    chave: "musica",              cor: COR.total },
           { rotulo: "Em produção",     valor: musica.producao,     chave: "musica_producao",     cor: COR.producao },
-          { rotulo: "Pendente envio",  valor: musica.pendente,     chave: "musica_pendente",     cor: COR.pendente },
           { rotulo: "Entregue",        valor: musica.entregue,     chave: "musica_entregue",     cor: COR.entregue },
+          { rotulo: "Pendente envio",  valor: musica.pendente,     chave: "musica_pendente",     cor: COR.pendente },
           { rotulo: "Erro de geração", valor: musica.erro,         chave: "musica_erro",         cor: COR.erro },
           { rotulo: "Sem rastreio",    valor: musica.sem_rastreio, chave: "sem_rastreio_musica", cor: COR.rastreio },
         ]} />
         <LinhaProduto titulo="✨ Página Premium" detalhe="up1 · ds1 · ds3" ativo={ativo} onClick={onClick} cards={[
-          { rotulo: "Compraram",         valor: pagina.compraram,    chave: "pagina",              cor: COR.total },
-          { rotulo: "Aguardando música", valor: pagina.aguardando,   chave: "pagina_aguardando",   cor: COR.aguardando },
-          { rotulo: "Pendente envio",    valor: pagina.pendente,     chave: "pagina_pendente",     cor: COR.pendente },
-          { rotulo: "Entregue",          valor: pagina.entregue,     chave: "pagina_entregue",     cor: COR.entregue },
-          { rotulo: "Sem rastreio",      valor: pagina.sem_rastreio, chave: "sem_rastreio_pagina", cor: COR.rastreio },
+          { rotulo: "Compraram",       valor: pagina.compraram,    chave: "pagina",              cor: COR.total },
+          null,
+          { rotulo: "Entregue",        valor: pagina.entregue,     chave: "pagina_entregue",     cor: COR.entregue },
+          { rotulo: "Pendente envio",  valor: pagina.pendente,     chave: "pagina_pendente",     cor: COR.pendente },
+          { rotulo: "Erro de geração", valor: pagina.erro,         chave: "pagina_erro",         cor: COR.erro },
+          { rotulo: "Sem rastreio",    valor: pagina.sem_rastreio, chave: "sem_rastreio_pagina", cor: COR.rastreio },
         ]} />
         <LinhaProduto titulo="🎬 Vídeo" detalhe="up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: video.compraram,    chave: "video",              cor: COR.total },
-          { rotulo: "Sem fotos",       valor: video.aguardando,   chave: "video_sem_fotos",    cor: COR.aguardando },
-          { rotulo: "Em produção",     valor: video.producao,     chave: "video_producao",     cor: COR.producao },
-          { rotulo: "Pendente envio",  valor: video.pendente,     chave: "video_pendentes",    cor: COR.pendente },
+          null,
           { rotulo: "Entregue",        valor: video.entregue,     chave: "video_entregue",     cor: COR.entregue },
+          { rotulo: "Pendente envio",  valor: video.pendente,     chave: "video_pendentes",    cor: COR.pendente },
           { rotulo: "Erro de geração", valor: video.erro,         chave: "video_erro",         cor: COR.erro },
           { rotulo: "Sem rastreio",    valor: video.sem_rastreio, chave: "sem_rastreio_video", cor: COR.rastreio },
         ]} />
