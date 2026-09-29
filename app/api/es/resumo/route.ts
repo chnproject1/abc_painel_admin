@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     entregas: {
-      musica: { compraram: n.musica, producao: n.musica_producao, pendente: n.musica_pendente, entregue: n.musica_entregue, erro: n.musica_erro, sem_rastreio: n.sem_rastreio_musica },
+      musica: { compraram: n.musica, pendente: n.musica_pendente, entregue: n.musica_entregue, erro: n.musica_erro, sem_rastreio: n.sem_rastreio_musica },
       pagina: { compraram: n.pagina, pendente: n.pagina_pendente, entregue: n.pagina_entregue, erro: n.pagina_erro, sem_rastreio: n.sem_rastreio_pagina },
       video:  { compraram: n.video, pendente: n.video_pendentes, entregue: n.video_entregue, erro: n.video_erro, sem_rastreio: n.sem_rastreio_video },
     },

@@ -31,7 +31,6 @@ const DS3: Where = { ds_status: "pago", AND: [naoPago("up1_status"), naoPago("up
 
 /* O que o cliente tem direito de receber — mesma regra de liberacoes() */
 const PAGINA: Where = { status: "pago", OR: [{ up1_status: "pago" }, { ds_status: "pago", AND: [naoPago("up1_status")] }] };
-const MUSICA_GERADA: Where = { OR: [{ gerou_musica: true }, { link_audio: { not: null } }] };
 const MUSICA_ERRO: Where = { erro_geracao: true, gerou_musica: false, entrega_email: false };
 
 const video = (is: Where): Where => ({ status: "pago", video: { is } });
@@ -41,7 +40,7 @@ export const FILTROS_ES: Record<string, () => Where> = {
   // ── Entregas: música (frente) ──
   musica:          () => ({ status: "pago" }),
   musica_producao: () => ({ status: "pago", gerou_musica: false, link_audio: null, erro_geracao: false }),
-  musica_pendente: () => ({ status: "pago", entrega_email: false, AND: [MUSICA_GERADA] }),
+  musica_pendente: () => ({ status: "pago", entrega_email: false, NOT: [MUSICA_ERRO] }),   // inclusive ainda gerando
   musica_entregue: () => ({ status: "pago", entrega_email: true }),
   musica_erro:     () => ({ status: "pago", ...MUSICA_ERRO }),
 

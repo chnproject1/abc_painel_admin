@@ -31,7 +31,7 @@ interface PedidoEs {
 /* Resposta de /api/es/resumo (regras em lib/es-resumo.ts) */
 interface ResumoEs {
   entregas: {
-    musica: { compraram: number; producao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    musica: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
     pagina: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
     video:  { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
   };
@@ -97,11 +97,9 @@ function Num({
 }
 
 /* Cores dos cards — as mesmas do painel BR (Total branco, Pagas verde,
-   Pendentes amarelo, Erro vermelho, Sem rastreio azul), mais ciano pra
-   "em produção" da música. */
+   Pendentes amarelo, Erro vermelho, Sem rastreio azul). */
 const COR = {
   total:      "bg-white border-gray-200 text-gray-800",
-  producao:   "bg-sky-50 border-sky-200 text-sky-800",
   pendente:   "bg-yellow-50 border-yellow-200 text-yellow-800",
   entregue:   "bg-green-50 border-green-200 text-green-800",
   erro:       "bg-red-50 border-red-200 text-red-800",
@@ -133,18 +131,15 @@ function LinhaProduto({
   titulo, detalhe, cards, ativo, onClick,
 }: {
   titulo: string; detalhe?: string; ativo: string | null; onClick: (chave: string) => void;
-  /* null = coluna vazia, pra cada cor ficar na mesma coluna nas três linhas */
-  cards: ({ rotulo: string; valor: number; chave: string; cor: string } | null)[];
+  cards: { rotulo: string; valor: number; chave: string; cor: string }[];
 }) {
   return (
     <div>
       <p className="text-sm font-semibold text-gray-700 mb-2">
         {titulo} {detalhe && <span className="text-xs font-normal text-gray-400">{detalhe}</span>}
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {cards.map((c, i) => c
-          ? <MiniCard key={c.chave} {...c} ativo={ativo} onClick={onClick} />
-          : <div key={`vazio-${i}`} className="hidden lg:block" />)}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {cards.map(c => <MiniCard key={c.chave} {...c} ativo={ativo} onClick={onClick} />)}
       </div>
     </div>
   );
@@ -195,10 +190,9 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
       {/* Entregas — uma linha de cards por produto, nas cores do BR */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entregas</p>
-        {/* Colunas fixas: Compraram · Em produção · Entregue · Pendente envio · Erro · Sem rastreio */}
+        {/* Colunas fixas: Compraram · Entregue · Pendente envio · Erro · Sem rastreio */}
         <LinhaProduto titulo="🎵 Música" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: musica.compraram,    chave: "musica",              cor: COR.total },
-          { rotulo: "Em produção",     valor: musica.producao,     chave: "musica_producao",     cor: COR.producao },
           { rotulo: "Entregue",        valor: musica.entregue,     chave: "musica_entregue",     cor: COR.entregue },
           { rotulo: "Pendente envio",  valor: musica.pendente,     chave: "musica_pendente",     cor: COR.pendente },
           { rotulo: "Erro de geração", valor: musica.erro,         chave: "musica_erro",         cor: COR.erro },
@@ -206,7 +200,6 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
         ]} />
         <LinhaProduto titulo="✨ Página Premium" detalhe="up1 · ds1 · ds3" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: pagina.compraram,    chave: "pagina",              cor: COR.total },
-          null,
           { rotulo: "Entregue",        valor: pagina.entregue,     chave: "pagina_entregue",     cor: COR.entregue },
           { rotulo: "Pendente envio",  valor: pagina.pendente,     chave: "pagina_pendente",     cor: COR.pendente },
           { rotulo: "Erro de geração", valor: pagina.erro,         chave: "pagina_erro",         cor: COR.erro },
@@ -214,7 +207,6 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
         ]} />
         <LinhaProduto titulo="🎬 Vídeo" detalhe="up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: video.compraram,    chave: "video",              cor: COR.total },
-          null,
           { rotulo: "Entregue",        valor: video.entregue,     chave: "video_entregue",     cor: COR.entregue },
           { rotulo: "Pendente envio",  valor: video.pendente,     chave: "video_pendentes",    cor: COR.pendente },
           { rotulo: "Erro de geração", valor: video.erro,         chave: "video_erro",         cor: COR.erro },
