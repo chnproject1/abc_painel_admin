@@ -65,8 +65,6 @@ node scripts/criar-usuario.js seuemail@gmail.com suasenha "Seu Nome" ADMIN
 # Criar usuário operador (para funcionário)
 node scripts/criar-usuario.js operador@email.com senha123 "Nome do Operador" OPERADOR
 
-# Importar dados do XLSX (primeira vez)
-node scripts/import-xlsx.js /caminho/para/CORRECAO.xlsx
 ```
 
 ## 6. Build e iniciar com PM2

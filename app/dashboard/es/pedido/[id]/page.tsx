@@ -63,6 +63,10 @@ interface PedidoEs {
   ds_rastreado?: boolean;
   reprocesso_musica?: number; reprocesso_envio?: number; reprocesso_pagina?: number; reprocesso_video?: number;
   reprocesso_em?: string | null;
+  // Recuperação (/api/es/recuperacao): e-mail com desconto e pedido "filho"
+  recuperacao?: number; recuperacao_em?: string | null;
+  recovery_id?: string | null; funil?: string | null;
+  recuperacao_motivo?: string | null; recuperacao_entrega?: string | null;
 
   // Vídeo (upsell 2 / downsell com vídeo): só existe em pedido novo (LATAM)
   video?: {
@@ -80,6 +84,7 @@ interface Toast { tipo: "ok" | "erro"; texto: string }
 const STATUS_COR: Record<string, string> = {
   pendente:  "bg-gray-100 text-gray-600",
   pago:      "bg-green-100 text-green-700",
+  recuperado: "bg-amber-100 text-amber-700",
   recusado:  "bg-gray-100 text-gray-400",
   cancelado: "bg-red-100 text-red-700",
 };
@@ -300,6 +305,22 @@ export default function PedidoEsPage() {
               </p>
             );
           })()}
+          {/* Recuperação — só admin */}
+          {isAdmin && (pedido.recovery_id || (pedido.recuperacao ?? 0) > 0) && (
+            <p className="text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">
+              {pedido.recovery_id ? (
+                <>🎁 Pedido de <b>recuperação</b> (preço com desconto) do pedido{" "}
+                  <a href={`/dashboard/es/pedido/${pedido.recovery_id}`} className="font-mono text-blue-600 hover:underline">{pedido.recovery_id}</a></>
+              ) : (
+                <>🎁 E-mail de recuperação enviado{pedido.recuperacao_em ? " em " + new Date(pedido.recuperacao_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}
+                  {pedido.recuperacao_entrega === "entregue" ? <> · <b className="text-green-700">✓ entregue</b></>
+                    : pedido.recuperacao_entrega ? <> · <b className="text-red-600">✕ não entregue</b> ({pedido.recuperacao_entrega.replace(/^erro:\s*/, "")})</>
+                    : <> · <span className="text-gray-400">sem retorno do envio</span></>}
+                  {pedido.recuperacao_motivo ? <> · motivo: <b>{pedido.recuperacao_motivo}</b></> : null}
+                  {pedido.status === "recuperado" ? <> · <b className="text-amber-700">recuperado</b> (pagou pelo link)</> : null}</>
+              )}
+            </p>
+          )}
         </section>
 
         {/* Cliente + Pedido */}
@@ -345,8 +366,7 @@ export default function PedidoEsPage() {
           </section>
         </div>
 
-        {/* Músicas — um bloco por slot. Todos os links aparecem sempre;
-            entregaPagina indica apenas se o cliente recebe o link Premium. */}
+        {/* Músicas — um bloco por slot. Todos os links aparecem sempre. */}
         <Musica
           titulo="Música 1 — venda inicial"
           nomeArquivo={pedido.nome}
@@ -355,7 +375,6 @@ export default function PedidoEsPage() {
           linkBasica={pedido.link_basica}
           linkAudio={pedido.link_audio}
           linkMp4={pedido.link_mp4}
-          entregaPagina={entregaPagina}
         />
 
         {temExtras && (
@@ -367,7 +386,6 @@ export default function PedidoEsPage() {
               linkPagina={pedido.link_pagina2}
               linkBasica={pedido.link_basica2}
               linkAudio={pedido.link_audio2}
-              entregaPagina={entregaPagina}
             />
             <Musica
               titulo="Música 3 — upsell 2"
@@ -376,7 +394,6 @@ export default function PedidoEsPage() {
               linkPagina={pedido.link_pagina3}
               linkBasica={pedido.link_basica3}
               linkAudio={pedido.link_audio3}
-              entregaPagina={entregaPagina}
             />
           </>
         )}
@@ -618,7 +635,7 @@ function OfertaBox({
 }
 
 function Musica({
-  titulo, nomeArquivo, songId, linkPagina, linkBasica, linkAudio, linkMp4, entregaPagina,
+  titulo, nomeArquivo, songId, linkPagina, linkBasica, linkAudio, linkMp4,
 }: {
   titulo: string;
   nomeArquivo: string;
@@ -627,7 +644,6 @@ function Musica({
   linkBasica?: string;
   linkAudio?: string;
   linkMp4?: string;
-  entregaPagina?: boolean;
 }) {
   const temAlgo = songId || linkPagina || linkBasica || linkAudio || linkMp4;
   if (!temAlgo) {
@@ -658,11 +674,6 @@ function Musica({
         )}
         {linkMp4 && <LinkBtn href={linkMp4} label="🎬 MP4" />}
       </div>
-      {linkPagina && !entregaPagina && (
-        <p className="text-xs text-yellow-700 mt-3">
-          Página Premium gerada, mas o cliente <strong>não tem direito</strong> a ela — sem upsell 1 nem downsell.
-        </p>
-      )}
     </section>
   );
 }

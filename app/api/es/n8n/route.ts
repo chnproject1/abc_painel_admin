@@ -29,6 +29,8 @@ const ACOES = [
   "up_music_ready", "up_email_entregue", "up_email_erro", "up_erro_geracao",
   // Rastreio — venda da frente registrada na UTMify/Meta/TikTok
   "rastreado",
+  // Recuperação — resultado do e-mail (fluxo "ES - Recuperação", depois do Resend)
+  "recuperacao_entregue", "recuperacao_erro",
 ];
 
 function autorizado(req: NextRequest): boolean {
@@ -255,6 +257,19 @@ export async function POST(req: NextRequest) {
     case "pagina_erro":
       update = { pagina_entrega_email: false };
       mensagem = "Entrega da página Premium marcada como erro";
+      break;
+
+    /* ── Recuperação: o e-mail chegou (ou não). O envio em si já foi marcado
+       pelo /api/es/recuperacao (recuperacao = 1). Erro NÃO volta pra fila:
+       bounce/endereço inválido não adianta reenviar. ── */
+    case "recuperacao_entregue":
+      update = { recuperacao_entrega: "entregue" };
+      mensagem = "E-mail de recuperação entregue";
+      break;
+
+    case "recuperacao_erro":
+      update = { recuperacao_entrega: `erro: ${String(data.erro_msg || data.motivo || "falha no envio").slice(0, 200)}` };
+      mensagem = "E-mail de recuperação não entregue";
       break;
 
     /* ── Fluxo 3: upsell 2 (músicas 2 e 3) ── */

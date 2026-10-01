@@ -228,11 +228,8 @@ abc-music-admin/
 │   ├── emissao-nfe-manual.md     # NF-e: como operar
 │   └── emissao-nfe-codigo.md     # NF-e: como o código funciona
 ├── scripts/
-│   ├── import-xlsx.js            # Importação do histórico do Google Sheets
+│   ├── adicionar-recuperacao-es.sql # Colunas da recuperação ES (rodar antes do deploy)
 │   ├── criar-usuario.js          # Criação de usuários (ADMIN/OPERADOR/PRODUTOR)
-│   ├── corrigir-booleanos.js     # Correção de campos booleanos pós-importação
-│   ├── teste-fluxo.js            # Simulação do fluxo completo (checkout → pagamento)
-│   ├── n8n-portal-nodes.json     # Nós HTTP prontos para importar no n8n
 │   ├── gerar-tabela-ddd-cep.js   # NF-e: raspa os endereços por DDD (roda uma vez)
 │   ├── marcar-historico-spedy.js # NF-e: backfill do histórico (roda uma vez)
 │   ├── gerar-lote-spedy.js       # NF-e: gera o lote da semana

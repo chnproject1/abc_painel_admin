@@ -250,6 +250,13 @@ model PedidoEs {
   funil         String?
   recovery_id   String?
   recuperacao   Int       @default(0)
+  recuperacao_em DateTime?  // envio do e-mail de recuperação (/api/es/recuperacao)
+  // Funil de recuperação: o que travou a compra ("¿Qué te detuvo?")
+  // precio | letra | estilo | dudas | pago | momento | direto
+  recuperacao_motivo String?
+  // Resultado do e-mail de recuperação, marcado pelo fluxo n8n "ES - Recuperação"
+  // depois de consultar o Resend: "entregue" | "erro: <motivo>" (vazio = sem retorno)
+  recuperacao_entrega String?
 
   // Upsell 2 (vídeo com fotos): produção fica na tabela própria
   video         PedidoVideoEs?

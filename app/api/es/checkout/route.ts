@@ -61,6 +61,7 @@ const MAPA_FUNIL: Record<string, string> = {
   fbclid: "fbclid",   ttclid: "ttclid",   pixel_id: "pixel_id",
   fbp: "fbp",         ttp: "ttp",         user_agent: "user_agent",
   ip: "ip",           funil: "funil",     recovery_id: "recovery_id",
+  recuperacao_motivo: "recuperacao_motivo",
   upsell: "upsell",
   upsell_status: "upsell_status",
   upsell_amount: "upsell_amount",
@@ -310,6 +311,14 @@ export async function GET(req: NextRequest) {
   });
 }
 
+/* Pedido de recuperação pago (recovery_id = original): o original vira
+   'recuperado', igual ao BR. Só mexe se ele ainda estiver pendente. */
+async function marcarOriginalRecuperado(id: string) {
+  const filho = await prisma.pedidoEs.findUnique({ where: { id }, select: { status: true, recovery_id: true } });
+  if (filho?.status !== "pago" || !filho.recovery_id) return;
+  await prisma.pedidoEs.updateMany({ where: { id: filho.recovery_id, status: "pendente" }, data: { status: "recuperado" } });
+}
+
 /* ─────────────── POST — criação e etapas do funil ─────────────── */
 
 export async function POST(req: NextRequest) {
@@ -448,6 +457,7 @@ export async function POST(req: NextRequest) {
         valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
       },
     });
+    if (merge.status === "pago") await marcarOriginalRecuperado(pedido.id);
     const video = await garantirVideo(pedido.id, pedido);
     // Compra da página acabou de entrar: se a música já existe, envia agora
     if (!liberacoes(atual).pagina && liberacoes(pedido).pagina) await dispararPaginaEs(pedido.id);
@@ -538,6 +548,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  if (data.action === "pago") await marcarOriginalRecuperado(pedido.id);
   const lib = liberacoes(pedido);
   const video = await garantirVideo(pedido.id, pedido);
   // Compra da página acabou de entrar: se a música já existe, envia agora

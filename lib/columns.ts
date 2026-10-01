@@ -154,6 +154,9 @@ export const CAMPOS_US_ADMIN_EXTRAS = [
   "funil",
   "recovery_id",
   "recuperacao",
+  "recuperacao_em",
+  "recuperacao_motivo",
+  "recuperacao_entrega",
 ] as const;
 
 export function selectPorRoleUs(role: string) {
