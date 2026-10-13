@@ -109,6 +109,7 @@ export default function PedidoEsPage() {
 
   const [toast, setToast] = useState<Toast | null>(null);
   const [acionando, setAcionando] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState(false);
 
   const isAdmin = (session?.user as any)?.role === "ADMIN";
 
@@ -133,6 +134,25 @@ export default function PedidoEsPage() {
       })
       .catch(() => setNaoEncontrado(true));
   }, [id]);
+
+  async function cancelarPedido() {
+    if (!confirm("Marcar como contato inválido? O pedido sairá das listas de pendentes e erros.")) return;
+    setCancelando(true);
+    try {
+      const res = await fetch(`/api/es/pedido/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelado" }),
+      });
+      if (!res.ok) throw new Error("Erro ao cancelar");
+      setPedido(prev => prev ? { ...prev, status: "cancelado" } : prev);
+      mostrarToast("ok", "Pedido marcado como contato inválido.");
+    } catch {
+      mostrarToast("erro", "Erro ao atualizar o pedido.");
+    } finally {
+      setCancelando(false);
+    }
+  }
 
   async function salvarLetra() {
     setSalvando(true);
@@ -232,6 +252,15 @@ export default function PedidoEsPage() {
             {pedido.status}
           </span>
         </div>
+        {isAdmin && pedido.status !== "cancelado" && (
+          <button
+            onClick={cancelarPedido}
+            disabled={cancelando}
+            className="text-xs border border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 hover:text-red-600 disabled:opacity-50 font-medium rounded-lg px-3 py-1.5 transition-colors shrink-0"
+          >
+            {cancelando ? "..." : "Contato inválido"}
+          </button>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
