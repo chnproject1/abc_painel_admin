@@ -29,8 +29,16 @@ const DS1: Where = { ds_status: "pago", up2_status: "pago", AND: [naoPago("up1_s
 const DS2: Where = { ds_status: "pago", up1_status: "pago", AND: [naoPago("up2_status")] };
 const DS3: Where = { ds_status: "pago", AND: [naoPago("up1_status"), naoPago("up2_status")] };
 
+/* Venda: pago OU cancelado. "Cancelado" é o botão "Contato inválido" do pedido —
+   o cliente pagou (conta na venda, na entrega e no rastreio), só não dá pra
+   entregar. Por isso as PENDÊNCIAS e ERROS abaixo continuam só com "pago":
+   o pedido sai dos alertas, mas não some do painel. */
+const VENDA: Where = { status: { in: ["pago", "cancelado"] } };
+
 /* O que o cliente tem direito de receber — mesma regra de liberacoes() */
-const PAGINA: Where = { status: "pago", OR: [{ up1_status: "pago" }, { ds_status: "pago", AND: [naoPago("up1_status")] }] };
+const DIREITO_PAGINA: Where = { OR: [{ up1_status: "pago" }, { ds_status: "pago", AND: [naoPago("up1_status")] }] };
+const PAGINA: Where = { status: "pago", ...DIREITO_PAGINA };               // pendências
+const PAGINA_VENDA: Where = { AND: [VENDA, DIREITO_PAGINA] };             // compraram / entregue
 const MUSICA_ERRO: Where = { erro_geracao: true, gerou_musica: false, entrega_email: false };
 
 const video = (is: Where): Where => ({ status: "pago", video: { is } });
@@ -38,22 +46,22 @@ const video = (is: Where): Where => ({ status: "pago", video: { is } });
 /** Chave do filtro → condição. Usado pela contagem e pela lista. */
 export const FILTROS_ES: Record<string, () => Where> = {
   // ── Entregas: música (frente) ──
-  musica:          () => ({ status: "pago" }),
+  musica:          () => VENDA,
   musica_producao: () => ({ status: "pago", gerou_musica: false, link_audio: null, erro_geracao: false }),
   musica_pendente: () => ({ status: "pago", entrega_email: false, NOT: [MUSICA_ERRO] }),   // inclusive ainda gerando
-  musica_entregue: () => ({ status: "pago", entrega_email: true }),
+  musica_entregue: () => ({ ...VENDA, entrega_email: true }),
   musica_erro:     () => ({ status: "pago", ...MUSICA_ERRO }),
 
   // ── Entregas: Página Premium (up1, ds1, ds3) ──
-  pagina:            () => PAGINA,
+  pagina:            () => PAGINA_VENDA,
   pagina_aguardando: () => ({ AND: [PAGINA], link_pagina: null, pagina_entrega_email: false }),   // esperando a música
   // Pendente = tudo que não foi entregue (inclusive esperando a música), menos erro
   pagina_pendente:   () => ({ AND: [PAGINA], pagina_entrega_email: false, NOT: [MUSICA_ERRO] }),
-  pagina_entregue:   () => ({ AND: [PAGINA], pagina_entrega_email: true }),
+  pagina_entregue:   () => ({ AND: [PAGINA_VENDA], pagina_entrega_email: true }),
   pagina_erro:       () => ({ AND: [PAGINA, MUSICA_ERRO], pagina_entrega_email: false }),         // a música não gerou, a página não sai
 
   // ── Entregas: vídeo (up2, ds2, ds3) — só pedido novo tem linha de vídeo ──
-  video:            () => ({ status: "pago", video: { isNot: null } }),
+  video:            () => ({ ...VENDA, video: { isNot: null } }),
   video_sem_fotos:  () => video({ producao: "aguardando_fotos" }),                                  // esperando o cliente
   video_producao:   () => video({ producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } }),
   // Pendente = tudo que não foi entregue (sem fotos, produzindo, pronto sem e-mail), menos erro
@@ -61,7 +69,7 @@ export const FILTROS_ES: Record<string, () => Where> = {
     { producao: { in: ["aguardando_fotos", "concluido"] } },
     { producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } },
   ] }),
-  video_entregue:   () => video({ entrega_email: true }),
+  video_entregue:   () => ({ ...VENDA, video: { is: { entrega_email: true } } }),
   // E-mail "Sube tus fotos" não saiu — e ainda faz falta: sem fotos e sem ter aberto o link
   video_sem_confirmacao: () => video({ envio_confirmacao: false, producao: "aguardando_fotos", aberto_em: null }),
   video_erro:       () => video({ OR: [
@@ -70,13 +78,13 @@ export const FILTROS_ES: Record<string, () => Where> = {
   ] }),
 
   // ── Rastreio: cada venda é um pedido próprio na UTMify ──
-  venda_front: () => ({ status: "pago" }),
+  venda_front: () => VENDA,
   venda_up1:   () => ({ up1_status: "pago" }),
   venda_up2:   () => ({ up2_status: "pago" }),
   venda_ds1:   () => DS1,
   venda_ds2:   () => DS2,
   venda_ds3:   () => DS3,
-  sem_rastreio_front: () => ({ status: "pago", rastreado: false }),
+  sem_rastreio_front: () => ({ ...VENDA, rastreado: false }),
   sem_rastreio_up1:   () => ({ up1_status: "pago", up1_rastreado: false }),
   sem_rastreio_up2:   () => ({ up2_status: "pago", up2_rastreado: false }),
   sem_rastreio_ds1:   () => ({ AND: [DS1], ds_rastreado: false }),
@@ -86,7 +94,7 @@ export const FILTROS_ES: Record<string, () => Where> = {
   // ── Rastreio por PRODUTO (linha de cada produto nas entregas) ──
   // Página: veio do up1 ou de um downsell que entrega a página (ds1, ds3)
   // Vídeo:  veio do up2 ou de um downsell que entrega o vídeo (ds2, ds3)
-  sem_rastreio_musica: () => ({ status: "pago", rastreado: false }),
+  sem_rastreio_musica: () => ({ ...VENDA, rastreado: false }),
   sem_rastreio_pagina: () => ({ OR: [
     { up1_status: "pago", up1_rastreado: false },
     { AND: [{ OR: [DS1, DS3] }], ds_rastreado: false },
