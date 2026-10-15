@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { avisarVideoLiberadoEs } from "@/lib/video-es-producao";
+import { avisarVideoLiberadoEs, dispararEstiloEs } from "@/lib/video-es-producao";
 
 /**
  * Aciona os fluxos n8n da operação ES (LATAM) a partir do painel.
@@ -27,7 +27,9 @@ const FLUXOS = {
     env: "ES_N8N_WEBHOOK_URL",
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "principal" }),
   },
-  // Gera as duas músicas extras (upsell 2 ou downsell/combo)
+  // Gera as músicas extras. Pedido com `estilo2` (estilo extra) não passa
+  // por aqui: vai pro fluxo "ES - Up Estilo" (ver abaixo). Este é o antigo, das
+  // duas músicas do US.
   upsell: {
     env: "ES_N8N_UPSELL_WEBHOOK_URL",
     corpo: (id: string) => ({ pedido_id: id, payment_id: id, tipo: "upsell" }),
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const pedido = await prisma.pedidoEs.findUnique({
     where: { id },
-    select: { id: true, up1_status: true, up2_status: true, ds_status: true, video: { select: { producao: true } } },
+    select: { id: true, up1_status: true, up2_status: true, ds_status: true, estilo2: true, video: { select: { producao: true } } },
   });
 
   if (!pedido) {
@@ -100,6 +102,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { error: "Este pedido não comprou o upsell 2 nem o downsell — não há músicas extras a gerar" },
       { status: 409 },
     );
+  }
+
+  // Estilo extra: gera de novo no fluxo "ES - Up Estilo", com estilo2 e letra no corpo
+  if (tipo === "upsell" && pedido.estilo2) {
+    const r = await dispararEstiloEs(id, true);
+    if (r !== "disparado") {
+      const msg = r === "sem_musica" ? "A música principal ainda não foi gerada — o estilo sai depois dela"
+        : r === "sem_url" ? "Webhook não configurado (falta a variável ES_N8N_ESTILO_WEBHOOK_URL)"
+        : `O n8n recusou a chamada (${r})`;
+      return NextResponse.json({ error: msg }, { status: r === "sem_musica" ? 409 : 502 });
+    }
+    return NextResponse.json({ ok: true, tipo: "estilo", id });
   }
 
   if (tipo === "video") {

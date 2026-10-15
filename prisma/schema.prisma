@@ -196,10 +196,14 @@ model PedidoEs {
   // Status por oferta — pendente | pago | recusado
   status        String    @default("pendente") // venda inicial
   up1_status    String?                        // upsell 1 — página Premium
-  up2_status    String?                        // upsell 2 — duas músicas extras
-  ds_status     String?                        // downsell — página Premium
+  up2_status    String?                        // upsell 2 — estilo extra (antes: vídeo; no US: duas músicas extras)
+  ds_status     String?                        // downsell — ds1 página, ds2 estilo, ds3 página + estilo
 
   estilo        String?
+  // Upsell 2 "estilo extra": a mesma letra noutro estilo, escolhido no funil.
+  // Preenchido = o up2/ds2/ds3 deste pedido é o estilo, não o vídeo (lib/es-ofertas.ts).
+  // A música sai nas colunas da música 2 (song_id2, link_audio2…) pelo fluxo "ES - Up Estilo".
+  estilo2       String?
   letra         String?   @db.Text
 
   // Entrega principal: música 1 + página Premium (se up1 ou ds pago)
@@ -220,7 +224,8 @@ model PedidoEs {
   pagina_entrega_email Boolean @default(false)
   pagina_data_entrega  DateTime?
 
-  // Entrega do upsell 2: músicas 2 e 3 (+ páginas, se up1 ou ds pago)
+  // Entrega do upsell 2: no funil do estilo, só a música 2 (up_tentativa_geracao
+  // conta os reprocessos dela); nos pedidos antigos do US, músicas 2 e 3
   up_gerou_musica Boolean @default(false)
   up_erro_geracao Boolean @default(false)
   song_id2      String?

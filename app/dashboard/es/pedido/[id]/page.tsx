@@ -22,6 +22,7 @@ interface PedidoEs {
   up2_status?: string | null;
   ds_status?: string | null;
   estilo?: string;
+  estilo2?: string | null;   // estilo extra (up2/ds2/ds3) — vazio = funil antigo
   letra?: string;
 
   gerou_musica: boolean;
@@ -62,6 +63,7 @@ interface PedidoEs {
   up2_rastreado?: boolean;
   ds_rastreado?: boolean;
   reprocesso_musica?: number; reprocesso_envio?: number; reprocesso_pagina?: number; reprocesso_video?: number;
+  up_tentativa_geracao?: number;   // reprocessos do estilo extra
   reprocesso_em?: string | null;
   // Recuperação (/api/es/recuperacao): e-mail com desconto e pedido "filho"
   recuperacao?: number; recuperacao_em?: string | null;
@@ -217,14 +219,16 @@ export default function PedidoEsPage() {
      são sempre geradas; a oferta só decide se o link vai no e-mail. */
   const lib = liberacoes(pedido);
   const entregaPagina = lib.pagina;
-  // Pedido novo (LATAM): up2 = vídeo, com linha em PedidoVideoEs.
-  // Pedido antigo (EUA): up2 = músicas extras, sem linha de vídeo.
+  // Pedido novo: up2 = estilo extra (estilo2), música 2 nas colunas *2.
+  // Funil anterior (LATAM): up2 = vídeo, com linha em PedidoVideoEs.
+  // Pedido antigo (EUA): up2 = músicas 2 e 3, sem linha de vídeo.
   const temVideo  = !!pedido.video;
-  const temExtras = !temVideo && (pedido.up2_status === "pago" || pedido.ds_status === "pago");
+  const temEstilo = lib.estilo;
+  const temExtras = !temVideo && !temEstilo && (pedido.up2_status === "pago" || pedido.ds_status === "pago");
   const dsTipo = pedido.ds_status === "pago" ? dsTipoDe(pedido) : null;
   // Nenhuma oferta do funil pode ser paga sem a venda inicial ter sido paga:
   // se isso acontece, o checkout registrou o upsell mas não a confirmação.
-  const ofertaPaga = entregaPagina || lib.video || temExtras;
+  const ofertaPaga = entregaPagina || lib.video || temEstilo || temExtras;
   const vendaInconsistente = ofertaPaga && pedido.status !== "pago";
   const estadoVideoEs = temVideo ? estadoVideoEs_(pedido.video!) : null;
 
@@ -272,7 +276,7 @@ export default function PedidoEsPage() {
             {/* Rastreio por oferta: cada uma é um pedido próprio na UTMify. Só admin. */}
             <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)}     rastreado={isAdmin ? pedido.rastreado : undefined} />
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
-            <OfertaBox titulo="Upsell 2"      descricao={temExtras ? "Músicas 2 e 3" : "Vídeo com fotos"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
+            <OfertaBox titulo="Upsell 2"      descricao={pedido.estilo2 ? `Estilo extra · ${pedido.estilo2}` : temExtras ? "Músicas 2 e 3" : temVideo ? "Vídeo com fotos" : "Estilo extra"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
             <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} rastreado={isAdmin ? pedido.ds_rastreado : undefined} />
           </div>
         </section>
@@ -312,7 +316,16 @@ export default function PedidoEsPage() {
                 quando={pedido.up_data_entrega}
               />
             )}
-            {!temExtras && (
+            {temEstilo && (
+              <Entrega
+                label={`Estilo extra (${pedido.estilo2}) — upsell 2 / downsell`}
+                comprado={temEstilo}
+                gerado={pedido.up_gerou_musica || !!pedido.link_audio2}
+                entregue={pedido.up_entrega_email}
+                quando={pedido.up_data_entrega}
+              />
+            )}
+            {temVideo && (
               <Entrega
                 label="Vídeo com fotos — upsell 2 / downsell"
                 comprado={lib.video}
@@ -327,6 +340,7 @@ export default function PedidoEsPage() {
             const etapas = [
               ["música", pedido.reprocesso_musica], ["envio", pedido.reprocesso_envio],
               ["página", pedido.reprocesso_pagina], ["vídeo", pedido.reprocesso_video],
+              ["estilo", temEstilo ? pedido.up_tentativa_geracao : 0],
             ].filter(([, n]) => Number(n) > 0).map(([nome, n]) => `${nome} ${n}×`);
             return (
               <p className="text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">
@@ -375,7 +389,7 @@ export default function PedidoEsPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Plano" valor={pedido.plano} mono />
-                <Campo label="Estilo" valor={pedido.estilo} />
+                <Campo label="Estilo" valor={pedido.estilo2 ? `${pedido.estilo ?? "—"} · extra: ${pedido.estilo2}` : pedido.estilo} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Idioma" valor={pedido.idioma} />
@@ -383,8 +397,8 @@ export default function PedidoEsPage() {
                   <Campo label="Entrega principal" valor={new Date(pedido.data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
                 )}
               </div>
-              {temExtras && pedido.up_data_entrega && (
-                <Campo label="Entrega das extras" valor={new Date(pedido.up_data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
+              {(temExtras || temEstilo) && pedido.up_data_entrega && (
+                <Campo label={temEstilo ? "Entrega do estilo extra" : "Entrega das extras"} valor={new Date(pedido.up_data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
               )}
               {pedido.data_pedido && (
                 <Campo label="Data do pedido" valor={new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
@@ -405,6 +419,17 @@ export default function PedidoEsPage() {
           linkAudio={pedido.link_audio}
           linkMp4={pedido.link_mp4}
         />
+
+        {temEstilo && (
+          <Musica
+            titulo={`Música 2 — estilo extra (${pedido.estilo2})`}
+            nomeArquivo={`${pedido.nome} ${pedido.estilo2}`}
+            songId={pedido.song_id2}
+            linkPagina={pedido.link_pagina2}
+            linkBasica={pedido.link_basica2}
+            linkAudio={pedido.link_audio2}
+          />
+        )}
 
         {temExtras && (
           <>
@@ -478,6 +503,16 @@ export default function PedidoEsPage() {
             disabled={!!acionando}
             onClick={() => acionar("principal")}
           />
+
+          {temEstilo && (
+            <Acao
+              titulo="Gerar estilo extra"
+              descricao={`Gera de novo a música no estilo ${pedido.estilo2} (mesma letra) e envia o link por e-mail.`}
+              rotulo={acionando === "upsell" ? "Gerando..." : "Gerar e enviar"}
+              disabled={!!acionando}
+              onClick={() => acionar("upsell")}
+            />
+          )}
 
           {temExtras && (
             <Acao

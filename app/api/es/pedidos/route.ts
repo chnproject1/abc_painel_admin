@@ -135,6 +135,7 @@ export async function GET(req: NextRequest) {
         up2_status: true,
         ds_status: true,
         estilo: true,
+        estilo2: true,
         gerou_musica: true,
         up_gerou_musica: true,
         link_audio: true,

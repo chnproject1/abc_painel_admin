@@ -17,6 +17,7 @@ interface PedidoEs {
   up2_status?: string | null;
   ds_status?: string | null;
   estilo?: string;
+  estilo2?: string | null;   // estilo extra (up2/ds2/ds3) — vazio = funil antigo
   gerou_musica: boolean;
   up_gerou_musica: boolean;
   link_audio?: string;
@@ -33,6 +34,7 @@ interface ResumoEs {
   entregas: {
     musica: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
     pagina: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
+    estilo: { compraram: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
     video:  { compraram: number; sem_confirmacao: number; pendente: number; entregue: number; erro: number; sem_rastreio: number };
   };
   rastreio: { oferta: string; rotulo: string; vendas: number; rastreadas: number; sem_rastreio: number; receita: number }[];
@@ -51,10 +53,10 @@ const FILTRO_LABEL: Record<string, string> = {
   pendentes:    "Pendentes envio",
   erro:         "Erro de geração",
   up1:          "Compraram o upsell 1 (Página Premium)",
-  up2:          "Compraram o upsell 2 (Vídeo)",
+  up2:          "Compraram o upsell 2 (Estilo extra; antes, Vídeo)",
   ds:           "Compraram o downsell",
-  pendentes_up: "Músicas extras pendentes (pedidos antigos)",
-  erro_up:      "Erro de geração (músicas extras, pedidos antigos)",
+  pendentes_up: "Estilo extra / músicas extras pendentes",
+  erro_up:      "Erro de geração (estilo extra / músicas extras)",
   video:           "Vídeo: compraram",
   video_sem_fotos: "Vídeo: sem fotos",
   video_pendentes: "Vídeo: pendentes envio",
@@ -146,7 +148,7 @@ function LinhaProduto({
 }
 
 function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null; onClick: (chave: string) => void }) {
-  const { musica, pagina, video } = r.entregas;
+  const { musica, pagina, estilo, video } = r.entregas;
   const semRastreio = r.rastreio.filter(x => x.sem_rastreio > 0);
   const totalSemRastreio = semRastreio.reduce((t, x) => t + x.sem_rastreio, 0);
 
@@ -157,6 +159,8 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
   if (musica.pendente)  atencao.push({ chave: "musica_pendente", texto: `${musica.pendente} música(s) sem entregar` });
   if (pagina.erro)      atencao.push({ chave: "pagina_erro", texto: `${pagina.erro} página(s) travada(s) por erro na música`, erro: true });
   if (pagina.pendente)  atencao.push({ chave: "pagina_pendente", texto: `${pagina.pendente} página(s) sem entregar` });
+  if (estilo.erro)      atencao.push({ chave: "estilo_erro", texto: `${estilo.erro} estilo(s) extra(s) com erro de geração`, erro: true });
+  if (estilo.pendente)  atencao.push({ chave: "estilo_pendente", texto: `${estilo.pendente} estilo(s) extra(s) sem entregar` });
   if (video.sem_confirmacao) atencao.push({ chave: "video_sem_confirmacao", texto: `${video.sem_confirmacao} confirmação(ões) de vídeo não enviada(s)` });
   if (video.erro)       atencao.push({ chave: "video_erro", texto: `${video.erro} vídeo(s) com erro`, erro: true });
   if (video.pendente)   atencao.push({ chave: "video_pendentes", texto: `${video.pendente} vídeo(s) pendente(s) de envio` });
@@ -206,7 +210,14 @@ function VisaoGeralEs({ r, ativo, onClick }: { r: ResumoEs; ativo: string | null
           { rotulo: "Erro de geração", valor: pagina.erro,         chave: "pagina_erro",         cor: COR.erro },
           { rotulo: "Sem rastreio",    valor: pagina.sem_rastreio, chave: "sem_rastreio_pagina", cor: COR.rastreio },
         ]} />
-        <LinhaProduto titulo="🎬 Vídeo" detalhe="up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
+        <LinhaProduto titulo="🎶 Estilo extra" detalhe="up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
+          { rotulo: "Compraram",       valor: estilo.compraram,    chave: "estilo",              cor: COR.total },
+          { rotulo: "Entregue",        valor: estilo.entregue,     chave: "estilo_entregue",     cor: COR.entregue },
+          { rotulo: "Pendente envio",  valor: estilo.pendente,     chave: "estilo_pendente",     cor: COR.pendente },
+          { rotulo: "Erro de geração", valor: estilo.erro,         chave: "estilo_erro",         cor: COR.erro },
+          { rotulo: "Sem rastreio",    valor: estilo.sem_rastreio, chave: "sem_rastreio_estilo", cor: COR.rastreio },
+        ]} />
+        <LinhaProduto titulo="🎬 Vídeo" detalhe="funil antigo · up2 · ds2 · ds3" ativo={ativo} onClick={onClick} cards={[
           { rotulo: "Compraram",       valor: video.compraram,    chave: "video",              cor: COR.total },
           { rotulo: "Entregue",        valor: video.entregue,     chave: "video_entregue",     cor: COR.entregue },
           { rotulo: "Pendente envio",  valor: video.pendente,     chave: "video_pendentes",    cor: COR.pendente },
@@ -261,15 +272,15 @@ function Oferta({ label, status }: { label: string; status?: string | null }) {
 
 /* Card da lista — mesmo desenho do BR (app/dashboard/page.tsx): estado da
    música, selo do vídeo e "Entregue" à direita. As etiquetas up1/up2/ds são
-   do funil ES. "Músicas extras" só aparece em pedido ANTIGO dos EUA (sem
-   linha de vídeo): no ES o up2/ds é o vídeo, não mais as músicas 2 e 3. */
+   do funil ES. Sem linha de vídeo, o up2/ds é uma música extra: o estilo
+   extra (com estilo2) ou as músicas 2 e 3 dos pedidos antigos dos EUA. */
 function PedidoCard({ p }: { p: PedidoEs }) {
   const gerada      = p.gerou_musica || !!p.link_audio || !!p.link_pagina;
   const alertaPago  = p.status === "pago" && !gerada;
   const naoEntregue = gerada && !p.entrega_email;
   const entregue    = !!p.entrega_email;
 
-  // Pedido antigo (EUA): up2/combo eram as duas músicas extras, sem vídeo
+  // Sem vídeo, o up2/ds é música extra: estilo extra, ou as duas do US antigo
   const extrasAntigas = !p.video && (p.up2_status === "pago" || p.ds_status === "pago");
   const extrasAbertas = extrasAntigas && !p.up_entrega_email;
 
@@ -290,7 +301,7 @@ function PedidoCard({ p }: { p: PedidoEs }) {
           <p className="text-sm text-gray-500 truncate">{p.email?.split("?")[0]}</p>
           <p className="text-sm text-gray-500 mt-1">
             {p.plano && <span className="font-mono text-xs">{p.plano}</span>}
-            {p.estilo && <span> · {p.estilo}</span>}
+            {p.estilo && <span> · {p.estilo}{p.estilo2 ? ` + ${p.estilo2}` : ""}</span>}
             {p.data_pedido && (
               <span> · {new Date(p.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
             )}
@@ -305,7 +316,9 @@ function PedidoCard({ p }: { p: PedidoEs }) {
           {p.video && (() => { const e = estadoVideoEs(p.video); return (
             <p className="text-xs font-medium mt-1"><span className={`px-1.5 py-0.5 rounded ${e.cor}`}>🎬 Vídeo: {e.rotulo}</span></p>
           ); })()}
-          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">Músicas extras (pedido antigo) — ainda não entregues</p>}
+          {extrasAbertas && <p className="text-xs text-yellow-700 font-medium mt-1">
+            {p.estilo2 ? `🎶 Estilo extra (${p.estilo2}) — ainda não entregue` : "Músicas extras (pedido antigo) — ainda não entregues"}
+          </p>}
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_COR[p.status] ?? "bg-gray-100 text-gray-600"}`}>

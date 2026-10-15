@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { FILTROS_ES } from "@/lib/es-resumo";
-import { dispararPaginaEs, refazerVideoEs } from "@/lib/video-es-producao";
+import { dispararPaginaEs, refazerVideoEs, dispararEstiloEs } from "@/lib/video-es-producao";
 
 /**
  * Reprocessa geração e envio da operação ES — o que travou no caminho.
@@ -16,6 +16,8 @@ import { dispararPaginaEs, refazerVideoEs } from "@/lib/video-es-producao";
  *   musica  pago e sem música (inclusive erro de geração)    30 min    2 (gasta Suno)
  *   envio   música pronta e e-mail não saiu                   30 min    3
  *   pagina  comprou a página, música pronta, não entregue     30 min    3
+ *   estilo  comprou o estilo, música 1 pronta, estilo não     30 min    2 (gasta Suno)
+ *           gerado nem entregue (inclusive erro de geração)
  *   video   erro, ou parado em produção > VIDEO_TRAVADO_MIN   —         3
  *
  * "Espera" conta da compra e também do último reprocesso da mesma etapa, pra
@@ -30,6 +32,7 @@ const ETAPAS = {
   envio:  { espera: 30, limite: 3, coluna: "reprocesso_envio" },
   pagina: { espera: 30, limite: 3, coluna: "reprocesso_pagina" },
   video:  { espera: 0,  limite: 3, coluna: "reprocesso_video" },
+  estilo: { espera: 30, limite: 2, coluna: "up_tentativa_geracao" },
 } as const;
 type Etapa = keyof typeof ETAPAS;
 
@@ -70,6 +73,7 @@ const DISPARO: Record<Etapa, (id: string) => Promise<string>> = {
   envio:  (id) => chamarN8n("ES_N8N_ENVIO_WEBHOOK_URL", { pedido_id: id, payment_id: id, tipo: "envio" }),
   pagina: (id) => dispararPaginaEs(id),
   video:  (id) => refazerVideoEs(id),
+  estilo: (id) => dispararEstiloEs(id, true),
 };
 
 /** Quem está travado em cada etapa (as regras de "pendente"/"erro" do painel + espera e limite) */
@@ -82,6 +86,9 @@ function ondeTravado(etapa: Etapa) {
     etapa === "musica" ? { status: "pago", link_audio: null, gerou_musica: false }
     : etapa === "envio" ? { status: "pago", link_audio: { not: null }, entrega_email: false }
     : etapa === "pagina" ? { AND: [FILTROS_ES.pagina_pendente()], link_pagina: { not: null } }
+    // atualizado_em: o music_ready (que dispara o estilo) mexe na linha — sem
+    // isto, um estilo disparado há 2 min seria disparado de novo (Suno em dobro)
+    : etapa === "estilo" ? { AND: [FILTROS_ES.estilo()], status: "pago", link_audio: { not: null }, up_gerou_musica: false, up_entrega_email: false, atualizado_em: { lt: minAtras(espera) } }
     : { AND: [FILTROS_ES.video_erro()], link_audio: { not: null } };
   return { AND: [regra, ...naoRecente, { [coluna]: { lt: limite } }] };
 }
@@ -111,16 +118,17 @@ export async function POST(req: NextRequest) {
   }
 
   // Quem esgotou as tentativas: fica pra resolver na mão (aparece na visão geral)
-  const [mus, env, pag, vid] = await Promise.all([
+  const [mus, env, pag, vid, est] = await Promise.all([
     prisma.pedidoEs.count({ where: { status: "pago", link_audio: null, gerou_musica: false, reprocesso_musica: { gte: ETAPAS.musica.limite } } }),
     prisma.pedidoEs.count({ where: { status: "pago", link_audio: { not: null }, entrega_email: false, reprocesso_envio: { gte: ETAPAS.envio.limite } } }),
     prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.pagina_pendente()], reprocesso_pagina: { gte: ETAPAS.pagina.limite } } as any }),
     prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.video_erro()], reprocesso_video: { gte: ETAPAS.video.limite } } as any }),
+    prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.estilo()], status: "pago", up_gerou_musica: false, up_entrega_email: false, up_tentativa_geracao: { gte: ETAPAS.estilo.limite } } as any }),
   ]);
 
   return NextResponse.json({
     success: true, simulado: simular,
     ...saida,
-    no_limite: { musica: mus, envio: env, pagina: pag, video: vid },
+    no_limite: { musica: mus, envio: env, pagina: pag, video: vid, estilo: est },
   });
 }

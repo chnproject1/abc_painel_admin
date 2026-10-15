@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe } from "@/lib/es-ofertas";
-import { avisarVideoLiberadoEs, dispararPaginaEs } from "@/lib/video-es-producao";
+import { avisarVideoLiberadoEs, dispararPaginaEs, dispararEstiloEs } from "@/lib/video-es-producao";
 import { marcarRastreio } from "@/lib/es-rastreio";
 
 /**
@@ -12,9 +12,11 @@ import { marcarRastreio } from "@/lib/es-rastreio";
  * `id` do Stripe. Todas as escritas são absolutas (nunca incrementam), então
  * reenviar a mesma ação reescreve os mesmos valores em vez de duplicar.
  *
- * Funil: venda inicial -> up1 (página Premium) -> up2 (vídeo com fotos)
- *        -> ds1 (comprou só o vídeo: oferece a página), ds2 (comprou só a
- *           página: oferece o vídeo) ou ds3 (recusou os dois: os dois juntos).
+ * Funil: venda inicial -> up1 (página Premium) -> up2 (estilo extra)
+ *        -> ds1 (comprou só o estilo: oferece a página), ds2 (comprou só a
+ *           página: oferece o estilo) ou ds3 (recusou os dois: os dois juntos).
+ *           O estilo escolhido chega em `estilo2`, junto com a compra. Pedido
+ *           sem `estilo2` é do funil antigo, em que o up2/ds2/ds3 era o vídeo.
  *           Os três gravam em ds_status; qual foi se deduz pelo que já estava
  *           pago. Regras em lib/es-ofertas.ts.
  *
@@ -51,6 +53,7 @@ const MAPA_FUNIL: Record<string, string> = {
   plan: "plano",      plano: "plano",
   status: "status",
   estilo: "estilo",   letra: "letra",   idioma: "idioma",
+  estilo2: "estilo2",
   nomefiscal: "nomefiscal",
   comprador: "comprador",
   zip: "zip_code",    zip_code: "zip_code",
@@ -75,8 +78,8 @@ const lista = (v: unknown): string[] =>
 
 /**
  * Traduz o registro bruto do funil para os status e valores por oferta que o
- * portal usa. Nomes que o funil manda: pagina = up1, video = up2 (o antigo
- * `versoes` das músicas extras ainda é aceito), ds / ds1 / ds2 / ds3 = downsell
+ * portal usa. Nomes que o funil manda: pagina = up1, estilo = up2 (o `video` e o
+ * antigo `versoes` ainda são aceitos), ds / ds1 / ds2 / ds3 = downsell
  * (o antigo `combo` também). Qual downsell foi se deduz pelo que já estava pago.
  *
  * No funil ES, `upsell` lista os PRODUTOS pagos ('video,ds1'), alinhados com
@@ -97,7 +100,7 @@ function derivarOfertas(linha: {
     // O produto recusado vem no início do upsell_erro, no formato "produto:codigo"
     const produto = String(linha.upsell_erro ?? "").split(":")[0].replace("-teste", "");
     if (produto === "pagina")  out.up1_status = "recusado";
-    if (produto === "versoes" || produto === "video") out.up2_status = "recusado";
+    if (produto === "estilo" || produto === "versoes" || produto === "video") out.up2_status = "recusado";
     if (produto === "combo"   || /^ds[123]?$/.test(produto)) out.ds_status  = "recusado";
     return out;
   }
@@ -128,7 +131,7 @@ function derivarOfertas(linha: {
       out.up1_status = "pago";
       if (Number.isFinite(v)) out.up1_valor = v;
     }
-    if (produto === "versoes" || produto === "video") {
+    if (produto === "estilo" || produto === "versoes" || produto === "video") {
       out.up2_status = "pago";
       if (Number.isFinite(v)) out.up2_valor = v;
     }
@@ -173,7 +176,7 @@ function tierDe(plano: string | null | undefined): string {
    aos sufixos de upsell, porque agora o downsell pode vir junto com um deles. */
 
 /** Garante a linha de produção do vídeo quando a venda libera o vídeo. Idempotente. */
-async function garantirVideo(id: string, ofertas: { up1_status?: string | null; up2_status?: string | null; ds_status?: string | null }) {
+async function garantirVideo(id: string, ofertas: { up1_status?: string | null; up2_status?: string | null; ds_status?: string | null; estilo2?: string | null }) {
   if (!liberacoes(ofertas).video) return null;
   let v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: id }, select: { token: true, producao: true, video_path: true } });
   if (!v) {
@@ -205,6 +208,7 @@ export async function GET(req: NextRequest) {
   const lib = liberacoes(p);
   const entrega_pagina = lib.pagina;
   const entrega_video  = lib.video;
+  const entrega_estilo = lib.estilo;
 
   // O funil fechou quando todas as ofertas que chegaram a ser exibidas
   // têm resposta. O ds é exibido se alguma das duas foi recusada.
@@ -237,6 +241,7 @@ export async function GET(req: NextRequest) {
       pais:       p.pais,
       idioma:     p.idioma,
       estilo:     p.estilo,
+      estilo2:    p.estilo2,
       letra:      p.letra,
 
       // Registro bruto do funil
@@ -253,6 +258,7 @@ export async function GET(req: NextRequest) {
       // Sinais de controle para a automação
       entrega_pagina,
       entrega_video,
+      entrega_estilo,
       ds_tipo: p.ds_status === "pago" ? dsTipoDe(p) : null,
       funil_completo,
 
@@ -274,7 +280,7 @@ export async function GET(req: NextRequest) {
       data_entrega: p.data_entrega,
       entrega_email: p.entrega_email,
 
-      // Produção — músicas 2 e 3 (upsell 2)
+      // Produção — música 2 (estilo extra; nos pedidos antigos do US, músicas 2 e 3)
       up_gerou_musica: p.up_gerou_musica,
       song_id2:     p.song_id2,
       link_pagina2: p.link_pagina2,
@@ -402,7 +408,7 @@ export async function POST(req: NextRequest) {
     where: { id: data.id },
     select: {
       plano: true, status: true,
-      up1_status: true, up2_status: true, ds_status: true,
+      up1_status: true, up2_status: true, ds_status: true, estilo2: true,
       upsell: true, upsell_status: true, upsell_amount: true, upsell_erro: true,
     },
   });
@@ -453,20 +459,22 @@ export async function POST(req: NextRequest) {
       data: merge,
       select: {
         id: true, plano: true, status: true,
-        up1_status: true, up2_status: true, ds_status: true,
+        up1_status: true, up2_status: true, ds_status: true, estilo2: true,
         valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
       },
     });
     if (merge.status === "pago") await marcarOriginalRecuperado(pedido.id);
     const video = await garantirVideo(pedido.id, pedido);
-    // Compra da página acabou de entrar: se a música já existe, envia agora
+    // Compra da página / do estilo acabou de entrar: se a música já existe, sai agora
     if (!liberacoes(atual).pagina && liberacoes(pedido).pagina) await dispararPaginaEs(pedido.id);
+    if (!liberacoes(atual).estilo && liberacoes(pedido).estilo) await dispararEstiloEs(pedido.id);
 
     return ok({
       message: `${Object.keys(merge).length} campo(s) atualizado(s)`,
       pedido,
       entrega_pagina: liberacoes(pedido).pagina,
       entrega_video:  liberacoes(pedido).video,
+      entrega_estilo: liberacoes(pedido).estilo,
       ...(video ?? {}),
       ...(ignorados.length ? { ignorados } : {}),
       aviso,
@@ -543,7 +551,7 @@ export async function POST(req: NextRequest) {
     data: update,
     select: {
       id: true, plano: true, status: true,
-      up1_status: true, up2_status: true, ds_status: true,
+      up1_status: true, up2_status: true, ds_status: true, estilo2: true,
       valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
     },
   });
@@ -553,12 +561,14 @@ export async function POST(req: NextRequest) {
   const video = await garantirVideo(pedido.id, pedido);
   // Compra da página acabou de entrar: se a música já existe, envia agora
   if (!liberacoes(atual).pagina && lib.pagina) await dispararPaginaEs(pedido.id);
+  if (!liberacoes(atual).estilo && lib.estilo) await dispararEstiloEs(pedido.id);
 
   return ok({
     message: `Ação "${data.action}" aplicada`,
     pedido,
     entrega_pagina: lib.pagina,
     entrega_video:  lib.video,
+    entrega_estilo: lib.estilo,
     ds_tipo: lib.ds_tipo,
     // Quando a venda libera o vídeo: pra onde mandar o cliente subir as fotos
     ...(video ?? {}),

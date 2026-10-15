@@ -7,7 +7,7 @@ import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
   número do quadro é sempre o tamanho da lista.
 
   Dois blocos:
-    Entregas  — por PRODUTO (o que o cliente recebe): música, página, vídeo
+    Entregas  — por PRODUTO (o que o cliente recebe): música, página, estilo, vídeo
     Rastreio  — por VENDA (o que vai pra UTMify): frente, up1, up2, ds1, ds2, ds3
 
   Não existe "dentro do prazo": a entrega é no mesmo fluxo pra silver e basic,
@@ -41,6 +41,16 @@ const PAGINA: Where = { status: "pago", ...DIREITO_PAGINA };               // pe
 const PAGINA_VENDA: Where = { AND: [VENDA, DIREITO_PAGINA] };             // compraram / entregue
 const MUSICA_ERRO: Where = { erro_geracao: true, gerou_musica: false, entrega_email: false };
 
+/* Estilo extra (up2, ds2, ds3 com estilo2) — mesma regra de liberacoes().estilo.
+   Sem estilo2, o up2/ds2/ds3 é o vídeo do funil antigo. */
+const DIREITO_ESTILO: Where = {
+  estilo2: { not: null },
+  OR: [{ up2_status: "pago" }, { ds_status: "pago", AND: [naoPago("up2_status")] }],
+};
+const ESTILO: Where = { status: "pago", ...DIREITO_ESTILO };               // pendências
+const ESTILO_VENDA: Where = { AND: [VENDA, DIREITO_ESTILO] };             // compraram / entregue
+const SEM_ESTILO: Where = { estilo2: null };
+
 const video = (is: Where): Where => ({ status: "pago", video: { is } });
 
 /** Chave do filtro → condição. Usado pela contagem e pela lista. */
@@ -60,7 +70,14 @@ export const FILTROS_ES: Record<string, () => Where> = {
   pagina_entregue:   () => ({ AND: [PAGINA_VENDA], pagina_entrega_email: true }),
   pagina_erro:       () => ({ AND: [PAGINA, MUSICA_ERRO], pagina_entrega_email: false }),         // a música não gerou, a página não sai
 
-  // ── Entregas: vídeo (up2, ds2, ds3) — só pedido novo tem linha de vídeo ──
+  // ── Entregas: estilo extra (up2, ds2, ds3) — música 2, fluxo "ES - Up Estilo" ──
+  estilo:          () => ESTILO_VENDA,
+  // Pendente = não entregue (inclusive gerando ou esperando a música 1), menos erro
+  estilo_pendente: () => ({ AND: [ESTILO], up_entrega_email: false, up_erro_geracao: false }),
+  estilo_entregue: () => ({ AND: [ESTILO_VENDA], up_entrega_email: true }),
+  estilo_erro:     () => ({ AND: [ESTILO], up_erro_geracao: true, up_entrega_email: false }),
+
+  // ── Entregas: vídeo (funil antigo: up2, ds2, ds3) — só pedido com linha de vídeo ──
   video:            () => ({ ...VENDA, video: { isNot: null } }),
   video_sem_fotos:  () => video({ producao: "aguardando_fotos" }),                                  // esperando o cliente
   video_producao:   () => video({ producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } }),
@@ -93,13 +110,17 @@ export const FILTROS_ES: Record<string, () => Where> = {
 
   // ── Rastreio por PRODUTO (linha de cada produto nas entregas) ──
   // Página: veio do up1 ou de um downsell que entrega a página (ds1, ds3)
-  // Vídeo:  veio do up2 ou de um downsell que entrega o vídeo (ds2, ds3)
+  // Estilo / vídeo: veio do up2 ou de um downsell que entrega o 2º produto (ds2, ds3)
   sem_rastreio_musica: () => ({ ...VENDA, rastreado: false }),
   sem_rastreio_pagina: () => ({ OR: [
     { up1_status: "pago", up1_rastreado: false },
     { AND: [{ OR: [DS1, DS3] }], ds_rastreado: false },
   ] }),
-  sem_rastreio_video: () => ({ OR: [
+  sem_rastreio_estilo: () => ({ AND: [{ estilo2: { not: null } }], OR: [
+    { up2_status: "pago", up2_rastreado: false },
+    { AND: [{ OR: [DS2, DS3] }], ds_rastreado: false },
+  ] }),
+  sem_rastreio_video: () => ({ AND: [SEM_ESTILO], OR: [
     { up2_status: "pago", up2_rastreado: false },
     { AND: [{ OR: [DS2, DS3] }], ds_rastreado: false },
   ] }),
@@ -110,11 +131,14 @@ export const ROTULO_FILTRO_ES: Record<string, string> = {
   musica_entregue: "Música: entregue", musica_erro: "Música: erro de geração",
   pagina: "Página Premium: compraram", pagina_aguardando: "Página Premium: aguardando a música",
   pagina_pendente: "Página Premium: pendente de envio", pagina_entregue: "Página Premium: entregue", pagina_erro: "Página Premium: erro (música não gerou)",
+  estilo: "Estilo extra: compraram", estilo_pendente: "Estilo extra: pendente de envio",
+  estilo_entregue: "Estilo extra: entregue", estilo_erro: "Estilo extra: erro de geração",
   video: "Vídeo: compraram", video_sem_fotos: "Vídeo: aguardando fotos", video_producao: "Vídeo: em produção",
   video_pendentes: "Vídeo: pendente de envio", video_entregue: "Vídeo: entregue", video_sem_confirmacao: "Vídeo: confirmação da compra não enviada", video_erro: "Vídeo: erro",
   venda_front: "Vendas da frente", venda_up1: "Vendas do up1", venda_up2: "Vendas do up2",
   venda_ds1: "Vendas do ds1", venda_ds2: "Vendas do ds2", venda_ds3: "Vendas do ds3",
   sem_rastreio_musica: "Música: sem rastreio", sem_rastreio_pagina: "Página Premium: sem rastreio", sem_rastreio_video: "Vídeo: sem rastreio",
+  sem_rastreio_estilo: "Estilo extra: sem rastreio",
   sem_rastreio_front: "Frente sem rastreio", sem_rastreio_up1: "Up1 sem rastreio", sem_rastreio_up2: "Up2 sem rastreio",
   sem_rastreio_ds1: "Ds1 sem rastreio", sem_rastreio_ds2: "Ds2 sem rastreio", sem_rastreio_ds3: "Ds3 sem rastreio",
 };

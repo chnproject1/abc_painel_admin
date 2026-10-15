@@ -175,3 +175,58 @@ export async function dispararPaginaEs(pedidoId: string, reenviar = false): Prom
     return "erro";
   }
 }
+
+/*
+  Música do estilo extra (up2, ds2 ou ds3 com `estilo2`) — fluxo n8n
+  "ES - Up Estilo" (ES_N8N_ESTILO_WEBHOOK_URL). Mesma letra, outro estilo.
+
+  Sai depois da música principal, como a página: quem chega por último dispara.
+    - /api/es/n8n music_ready → o estilo já tinha sido comprado
+    - /api/es/checkout        → a compra do estilo entrou e a música já existe
+  O fluxo gera no Suno, chama up_music_ready e manda o e-mail com o link
+  (up_email_entregue / up_email_erro). `forcar` (botão do painel, reprocesso)
+  gera de novo mesmo já gerada. Nunca lança.
+*/
+export async function dispararEstiloEs(pedidoId: string, forcar = false): Promise<string> {
+  try {
+    const p = await prisma.pedidoEs.findUnique({
+      where: { id: pedidoId },
+      select: {
+        nome: true, email: true, idioma: true, letra: true, estilo: true, estilo2: true,
+        up2_status: true, ds_status: true, link_audio: true,
+        up_gerou_musica: true, up_entrega_email: true,
+      },
+    });
+    if (!p) return "sem_pedido";
+    const comprou = p.up2_status === "pago" || (p.ds_status === "pago" && p.up2_status !== "pago");
+    if (!comprou || !p.estilo2) return "nao_comprou";
+    if (!p.link_audio) return "sem_musica";             // sai depois da música principal
+    if ((p.up_gerou_musica || p.up_entrega_email) && !forcar) return "ja_gerada";
+
+    const url = process.env.ES_N8N_ESTILO_WEBHOOK_URL;
+    if (!url) {
+      console.error("[estilo-es] ES_N8N_ESTILO_WEBHOOK_URL não configurada — estilo não gerado:", pedidoId);
+      return "sem_url";
+    }
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pedido_id: pedidoId, payment_id: pedidoId, tipo: "estilo",
+        nome: p.nome,                  // homenageado(a)
+        email: p.email.split("?")[0],
+        idioma: p.idioma || "es",
+        letra: p.letra,
+        estilo: p.estilo,              // o da música principal
+        estilo2: p.estilo2,            // o escolhido no upsell
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    console.log("[estilo-es] geração do estilo disparada:", pedidoId, p.estilo2, "| n8n", r.status);
+    return r.ok ? "disparado" : `n8n_${r.status}`;
+  } catch (e: any) {
+    console.error("[estilo-es] falha ao disparar o estilo:", pedidoId, e?.message);
+    return "erro";
+  }
+}

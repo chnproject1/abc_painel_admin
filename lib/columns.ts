@@ -65,7 +65,8 @@ export function selectPorRole(role: string) {
 /* ──────────────────────────────────────────────────────────────
    Operação ES (LATAM, espanhol) (model PedidoEs)
    Sem telefone e sem campos fiscais brasileiros.
-   Três slots de música: 1 = venda inicial, 2 e 3 = upsell 2.
+   Três slots de música: 1 = venda inicial, 2 = estilo extra (upsell 2);
+   2 e 3 = as duas músicas do upsell 2 nos pedidos antigos do US.
    ────────────────────────────────────────────────────────────── */
 
 // Campos visíveis para PRODUTOR (só o necessário para produzir as músicas)
@@ -77,6 +78,7 @@ export const CAMPOS_US_PRODUTOR = [
   "up2_status",
   "idioma",
   "estilo",
+  "estilo2",
   "letra",
   "song_id",
   "link_pagina",
@@ -129,6 +131,7 @@ export const CAMPOS_US_ADMIN_EXTRAS = [
   "reprocesso_envio",
   "reprocesso_pagina",
   "reprocesso_video",
+  "up_tentativa_geracao",   // reprocessos do estilo extra
   "reprocesso_em",
   "up1_rastreado",
   "up2_rastreado",

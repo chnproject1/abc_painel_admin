@@ -1,11 +1,16 @@
 /*
   Ofertas da operação ES (LATAM), num lugar só.
 
-  Funil: front (basic | silver) → up1 Página Premium → up2 Vídeo com fotos.
+  Funil: front (basic | silver) → up1 Página Premium → up2 Estilo extra.
   Três downsells, um por situação, todos na mesma coluna ds_status:
-    - ds1: comprou o up2 (vídeo) e recusou o up1 → oferece a Página Premium (US$ 9)
-    - ds2: comprou o up1 (página) e recusou o up2 → oferece o Vídeo (US$ 18)
-    - ds3: recusou os dois → Página + Vídeo juntos (US$ 18)
+    - ds1: comprou o up2 (estilo) e recusou o up1 → oferece a Página Premium (US$ 9)
+    - ds2: comprou o up1 (página) e recusou o up2 → oferece o Estilo (US$ 8)
+    - ds3: recusou os dois → Página + Estilo juntos (US$ 8)
+
+  Até out/2026 o up2 (e o ds2/ds3) era o VÍDEO com fotos. Os nomes das ofertas
+  não mudaram (up2, ds2, ds3 — rastreio e plano iguais); o que diz se o pedido
+  levou o estilo ou o vídeo é a coluna `estilo2`: preenchida = estilo. O vídeo
+  continua no código pra voltar como order bump.
   Não existe coluna dizendo qual ds foi: dá pra deduzir pelo que já estava
   pago. Por isso a regra de "o que foi liberado" mora aqui e vale pra
   checkout, n8n, stats, lista, telas e rastreio (mesmos nomes: up1, up2,
@@ -20,6 +25,7 @@ export type OfertasEs = {
   up1_status?: StatusOferta;
   up2_status?: StatusOferta;
   ds_status?: StatusOferta;
+  estilo2?: string | null;
 };
 
 export type DsTipo = "ds1" | "ds2" | "ds3";
@@ -35,8 +41,8 @@ export function dsTipoDe(o: OfertasEs): DsTipo {
 
 export const DS_ROTULO: Record<DsTipo, string> = {
   ds1: "Downsell 1 · só a Página Premium",
-  ds2: "Downsell 2 · só o Vídeo",
-  ds3: "Downsell 3 · Página + Vídeo",
+  ds2: "Downsell 2 · só o Estilo (antes: Vídeo)",
+  ds3: "Downsell 3 · Página + Estilo (antes: Vídeo)",
 };
 
 /** O downsell é oferecido sempre que alguma das duas ofertas não foi comprada. */
@@ -48,8 +54,11 @@ export function dsFoiOfertado(o: OfertasEs): boolean {
 export function liberacoes(o: OfertasEs) {
   const ds = o.ds_status === "pago";
   const pagina = o.up1_status === "pago" || (ds && o.up1_status !== "pago");
-  const video  = o.up2_status === "pago" || (ds && o.up2_status !== "pago");
-  return { pagina, video, ds_tipo: ds ? dsTipoDe(o) : null };
+  // O 2º produto do funil (up2, ou o ds2/ds3): estilo nos pedidos novos, vídeo nos antigos
+  const extra  = o.up2_status === "pago" || (ds && o.up2_status !== "pago");
+  const estilo = extra && !!o.estilo2;
+  const video  = extra && !o.estilo2;
+  return { pagina, video, estilo, ds_tipo: ds ? dsTipoDe(o) : null };
 }
 
 /** Sufixos do plano acompanham as ofertas pagas. O downsell entra com o número

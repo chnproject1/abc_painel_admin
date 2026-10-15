@@ -3,14 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { liberacoes } from "@/lib/es-ofertas";
 import { marcarRastreio } from "@/lib/es-rastreio";
-import { dispararProducaoVideoEs, refazerVideoEs, dispararPaginaEs } from "@/lib/video-es-producao";
+import { dispararProducaoVideoEs, refazerVideoEs, dispararPaginaEs, dispararEstiloEs } from "@/lib/video-es-producao";
 
 /**
  * Callbacks das automações da operação ES (LATAM) (model PedidoEs).
  *
  * Mesmos nomes de ação do /api/n8n do BR, para os nós do n8n serem portados
- * trocando só a URL. As ações com prefixo `up_` são do segundo fluxo, que gera
- * as duas músicas extras do upsell 2.
+ * trocando só a URL. As ações com prefixo `up_` são do fluxo "ES - Up Estilo",
+ * que gera a música do estilo extra (upsell 2) nas colunas da música 2 — nos
+ * pedidos antigos do US eram as duas músicas extras (2 e 3).
  *
  * Proteção: aceita ES_N8N_SECRET e, se ela não existir, ES_CHECKOUT_SECRET (os nomes US_* antigos ainda valem) —
  * assim funciona sem criar uma variável nova. O header pode ser
@@ -25,7 +26,7 @@ const ACOES = [
   "music_ready", "email_entregue", "email_erro", "erro_geracao",
   // Fluxo da página Premium (up1 / downsell)
   "pagina_entregue", "pagina_erro",
-  // Fluxo 3 — upsell 2, músicas 2 e 3
+  // Fluxo "ES - Up Estilo" — upsell 2, música 2 (pedidos antigos: músicas 2 e 3)
   "up_music_ready", "up_email_entregue", "up_email_erro", "up_erro_geracao",
   // Rastreio — venda da frente registrada na UTMify/Meta/TikTok
   "rastreado",
@@ -272,7 +273,7 @@ export async function POST(req: NextRequest) {
       mensagem = "E-mail de recuperação não entregue";
       break;
 
-    /* ── Fluxo 3: upsell 2 (músicas 2 e 3) ── */
+    /* ── Fluxo "ES - Up Estilo": upsell 2 (música 2; pedidos antigos, 2 e 3) ── */
 
     case "up_music_ready":
       // Aceita as duas músicas numa chamada só, ou uma por vez —
@@ -290,7 +291,7 @@ export async function POST(req: NextRequest) {
         link_audio3:  txt(data.link_audio3),
         up_data_entrega: parseData(data.up_data_entrega ?? data.data_entrega),
       };
-      mensagem = "Músicas extras marcadas como geradas";
+      mensagem = "Música do estilo extra marcada como gerada";
       break;
 
     case "up_email_entregue":
@@ -328,7 +329,7 @@ export async function POST(req: NextRequest) {
       data: update,
       select: {
         id: true, plano: true, status: true,
-        up1_status: true, up2_status: true, ds_status: true,
+        up1_status: true, up2_status: true, ds_status: true, estilo2: true,
         gerou_musica: true, erro_geracao: true, entrega_email: true,
         pagina_entrega_email: true,
         up_gerou_musica: true, up_erro_geracao: true, up_entrega_email: true,
@@ -343,16 +344,20 @@ export async function POST(req: NextRequest) {
          regeneração: vídeo refeito com as mesmas fotos; página reenviada com o link novo */
     let video_disparo: string | undefined;
     let pagina_disparo: string | undefined;
+    let estilo_disparo: string | undefined;
     if (action === "music_ready") {
       const novo = txt(data.link_audio);
       const regenerada = Boolean(antes?.link_audio && novo && novo !== antes.link_audio);
       if (lib.video)  video_disparo  = regenerada ? await refazerVideoEs(id) : await dispararProducaoVideoEs(id);
       if (lib.pagina) pagina_disparo = await dispararPaginaEs(id, regenerada);
+      // O estilo usa a letra, não o MP3: regenerar a música 1 não refaz o estilo
+      if (lib.estilo && !regenerada) estilo_disparo = await dispararEstiloEs(id);
     }
 
     return NextResponse.json({
-      success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video,
+      success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video, entrega_estilo: lib.estilo,
       ...(video_disparo ? { video_disparo } : {}), ...(pagina_disparo ? { pagina_disparo } : {}),
+      ...(estilo_disparo ? { estilo_disparo } : {}),
     });
   } catch (e: any) {
     if (e?.code === "P2025") {

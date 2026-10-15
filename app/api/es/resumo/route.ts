@@ -45,15 +45,16 @@ export async function GET(req: NextRequest) {
     entregas: {
       musica: { compraram: n.musica, pendente: n.musica_pendente, entregue: n.musica_entregue, erro: n.musica_erro, sem_rastreio: n.sem_rastreio_musica },
       pagina: { compraram: n.pagina, pendente: n.pagina_pendente, entregue: n.pagina_entregue, erro: n.pagina_erro, sem_rastreio: n.sem_rastreio_pagina },
+      estilo: { compraram: n.estilo, pendente: n.estilo_pendente, entregue: n.estilo_entregue, erro: n.estilo_erro, sem_rastreio: n.sem_rastreio_estilo },
       video:  { compraram: n.video, pendente: n.video_pendentes, sem_confirmacao: n.video_sem_confirmacao, entregue: n.video_entregue, erro: n.video_erro, sem_rastreio: n.sem_rastreio_video },
     },
     rastreio: [
       venda("front", "Frente (silver / basic)", rFront),
       venda("up1", "Up1 · página", rUp1),
-      venda("up2", "Up2 · vídeo", rUp2),
+      venda("up2", "Up2 · estilo (antes: vídeo)", rUp2),
       venda("ds1", "Ds1 · página", rDs1),
-      venda("ds2", "Ds2 · vídeo", rDs2),
-      venda("ds3", "Ds3 · página + vídeo", rDs3),
+      venda("ds2", "Ds2 · estilo (antes: vídeo)", rDs2),
+      venda("ds3", "Ds3 · página + estilo (antes: vídeo)", rDs3),
     ],
   });
 }
