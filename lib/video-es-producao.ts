@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { linkFotosEs, gerarToken } from "@/lib/video";
 import { liberacoes, ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
 
-/** Vídeo cartoon (order bump) mora na mesma tabela do vídeo de fotos, marcado em opcoes. */
+/** Vídeo com letra (Order 1; o nome interno ficou "cartoon") mora na mesma tabela do vídeo de fotos, marcado em opcoes. */
 export function ehCartoon(opcoes: unknown): boolean {
   return !!opcoes && typeof opcoes === "object" && (opcoes as any).modelo === "cartoon";
 }
@@ -29,7 +29,7 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
     if (v && ehCartoon(v.opcoes) && !(v.opcoes as any).lookalike) return "cartoon_sem_fotos";
     if (v && v.producao !== "aguardando_fotos") return "ja_tem_fotos";
 
-    // Lookalike (vídeo cartoon) tem e-mail próprio: 1 a 3 fotos, só de referência, prazo de
+    // Order 1 Plus ("lookalike") tem e-mail próprio: 1 a 15 fotos na moldura, prazo de
     // ESPERA_FOTOS_MIN — fluxo "ES - Confirmação Lookalike". O vídeo de fotos usa o de sempre.
     const lookalike = !!v && ehCartoon(v.opcoes);
     const variavel = lookalike ? "ES_N8N_FOTOS_LOOKALIKE_WEBHOOK_URL" : "ES_N8N_FOTOS_WEBHOOK_URL";
@@ -54,7 +54,7 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
         email: p.email.split("?")[0],
         idioma: p.idioma || "es",
         video_link: linkFotosEs(token),
-        ...(lookalike ? { modelo: "cartoon", max_fotos: 3, prazo_min: ESPERA_FOTOS_MIN } : {}),
+        ...(lookalike ? { modelo: "cartoon", max_fotos: 15, prazo_min: ESPERA_FOTOS_MIN } : {}),
       }),
       signal: AbortSignal.timeout(6000),
     });
@@ -246,13 +246,13 @@ export async function dispararEstiloEs(pedidoId: string, forcar = false): Promis
 }
 
 /*
-  VÍDEO CARTOON (order bump do checkout) — fluxo n8n "ES - Vídeo Cartoon"
+  VÍDEO COM LETRA (Order 1 do checkout; Plus = + fotos) — fluxo n8n "ES - Vídeo Letra"
   (ES_N8N_VIDEO_CARTOON_WEBHOOK_URL). SÓ a música principal vira vídeo: quem
   dispara é o music_ready, nunca o up_music_ready da música do estilo extra.
 
   Estados (PedidoVideoEs.producao):
     aguardando_musica  sem lookalike, esperando a música principal
-    aguardando_fotos   lookalike, esperando as fotos (até ESPERA_FOTOS_MIN; depois avatar aleatório)
+    aguardando_fotos   Plus, esperando as fotos (até ESPERA_FOTOS_MIN; depois sai sem fotos)
     fotos_enviadas     lookalike com fotos, esperando a música
     renderizando → concluido | erro   (o n8n e o cartoon-render marcam)
 */

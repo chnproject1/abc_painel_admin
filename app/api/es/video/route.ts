@@ -96,9 +96,8 @@ export async function POST(req: NextRequest) {
     const v = validarFotos(data.fotos, t);
     if (!v.ok) return erro(v.erro);
 
-    // vídeo cartoon (lookalike): até 3 fotos, só de referência para o avatar; mantém a marca do cartoon
+    // vídeo com letra (Order 1 Plus): até 15 fotos na moldura (validarFotos); mantém a marca do vídeo
     const cartoon = ehCartoon(video.opcoes);
-    if (cartoon && v.fotos.length > 3) return erro("máximo de 3 fotos");
     const opcoes = cartoon ? (video.opcoes as any)
       : data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
 

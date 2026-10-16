@@ -132,7 +132,7 @@ export const CAMPOS_US_ADMIN_EXTRAS = [
   "reprocesso_pagina",
   "reprocesso_video",
   "up_tentativa_geracao",   // reprocessos do estilo extra
-  "bump1", "bump1_valor",   // order bump 1 do checkout (vídeo cartoon, + lookalike)
+  "bump1", "bump1_valor",   // order bump 1 do checkout (vídeo com letra; Plus = + fotos)
   "bump2", "bump2_valor",   // order bump 2 do checkout (livre)
   "reprocesso_em",
   "up1_rastreado",

@@ -123,7 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const msg = r === "sem_musica" ? "A música principal ainda não foi gerada — o vídeo sai depois dela"
         : r === "nao_pago" ? "Pedido não está pago"
         : r === "sem_url" ? "Webhook não configurado (falta a variável ES_N8N_VIDEO_CARTOON_WEBHOOK_URL)"
-        : `Não deu pra disparar o vídeo cartoon (${r})`;
+        : `Não deu pra disparar o vídeo com letra (${r})`;
       return NextResponse.json({ error: msg }, { status: r === "sem_url" ? 500 : 409 });
     }
     return NextResponse.json({ ok: true, tipo: "video_cartoon", id });

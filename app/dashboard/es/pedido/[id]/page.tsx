@@ -78,9 +78,9 @@ interface PedidoEs {
     aberto_em?: string | null; fotos_em?: string | null; concluido_em?: string | null; entregue_em?: string | null;
     atualizado_em?: string | null; criado_em?: string | null;
     link: string; ver_link: string; video_url?: string | null;
-    cartoon?: boolean; lookalike?: boolean;   // vídeo cartoon (order bump)
+    cartoon?: boolean; lookalike?: boolean;   // vídeo com letra (Order 1) / + fotos (Plus)
   } | null;
-  bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo cartoon, + lookalike)
+  bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo com letra, Plus = + fotos)
   bump2?: string | null; bump2_valor?: string | null;   // order bump 2 (livre)
 }
 
@@ -281,7 +281,7 @@ export default function PedidoEsPage() {
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
             <OfertaBox titulo="Upsell 2"      descricao={pedido.estilo2 ? `Estilo extra · ${pedido.estilo2}` : temExtras ? "Músicas 2 e 3" : temVideo && !pedido.video?.cartoon ? "Vídeo com fotos" : "Estilo extra"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
             {pedido.bump1 && pedido.bump1 !== "nao" && (
-              <OfertaBox titulo="Bump 1" descricao={pedido.bump1.includes("lookalike") ? "Vídeo cartoon + lookalike" : pedido.bump1 === "video" ? "Vídeo cartoon" : pedido.bump1} status={pedido.status} valor={usd(pedido.bump1_valor)} />
+              <OfertaBox titulo="Bump 1" descricao={pedido.bump1.includes("lookalike") ? "Vídeo com letra + fotos (Order 1 Plus)" : pedido.bump1 === "video" ? "Vídeo com letra (Order 1)" : pedido.bump1} status={pedido.status} valor={usd(pedido.bump1_valor)} />
             )}
             {pedido.bump2 && pedido.bump2 !== "nao" && (
               <OfertaBox titulo="Bump 2" descricao={pedido.bump2} status={pedido.status} valor={usd(pedido.bump2_valor)} />
@@ -336,7 +336,7 @@ export default function PedidoEsPage() {
             )}
             {temVideo && (
               <Entrega
-                label={pedido.video?.cartoon ? `Vídeo cartoon — order bump${pedido.video.lookalike ? " + lookalike" : ""}` : "Vídeo com fotos — upsell 2 / downsell"}
+                label={pedido.video?.cartoon ? `Vídeo com letra — Order 1${pedido.video.lookalike ? " Plus (fotos)" : ""}` : "Vídeo com fotos — upsell 2 / downsell"}
                 comprado={lib.video}
                 gerado={!!pedido.video?.video_url}
                 entregue={!!pedido.video?.entrega_email}
@@ -548,7 +548,7 @@ export default function PedidoEsPage() {
           return (
             <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
               <div className="flex items-start justify-between gap-3 mb-4">
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{pedido.video?.cartoon ? `🎬 Vídeo cartoon${pedido.video.lookalike ? " + lookalike" : ""}` : "🎬 Vídeo (upsell)"}</h2>
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{pedido.video?.cartoon ? `🎬 Vídeo com letra${pedido.video.lookalike ? " + fotos" : ""}` : "🎬 Vídeo (upsell)"}</h2>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
               </div>
               <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>

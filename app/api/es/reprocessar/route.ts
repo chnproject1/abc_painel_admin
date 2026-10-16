@@ -20,8 +20,8 @@ import { ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
  *   estilo  comprou o estilo, música 1 pronta, estilo não     30 min    2 (gasta Suno)
  *           gerado nem entregue (inclusive erro de geração)
  *   video   erro, ou parado em produção > VIDEO_TRAVADO_MIN   —         3
- *   cartoon vídeo cartoon (bump) que não saiu: lookalike sem    —         3
- *           fotos depois de ESPERA_FOTOS_MIN (vai com avatar aleatório) ou
+ *   cartoon vídeo com letra (Order 1) que não saiu: Plus sem    —         3
+ *           fotos depois de ESPERA_FOTOS_MIN (sai sem fotos) ou
  *           esperando com a música pronta há > 30 min (disparo perdido)
  *
  * "Espera" conta da compra e também do último reprocesso da mesma etapa, pra
