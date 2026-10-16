@@ -29,9 +29,13 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
     if (v && ehCartoon(v.opcoes) && !(v.opcoes as any).lookalike) return "cartoon_sem_fotos";
     if (v && v.producao !== "aguardando_fotos") return "ja_tem_fotos";
 
-    const url = process.env.ES_N8N_FOTOS_WEBHOOK_URL;
+    // Lookalike (vídeo cartoon) tem e-mail próprio: 1 a 3 fotos, só de referência, prazo de
+    // ESPERA_FOTOS_MIN — fluxo "ES - Confirmação Lookalike". O vídeo de fotos usa o de sempre.
+    const lookalike = !!v && ehCartoon(v.opcoes);
+    const variavel = lookalike ? "ES_N8N_FOTOS_LOOKALIKE_WEBHOOK_URL" : "ES_N8N_FOTOS_WEBHOOK_URL";
+    const url = process.env[variavel];
     if (!url) {
-      console.error("[video-es] ES_N8N_FOTOS_WEBHOOK_URL não configurada — e-mail das fotos não enviado:", pedidoId);
+      console.error(`[video-es] ${variavel} não configurada — e-mail das fotos não enviado:`, pedidoId);
       return "sem_url";
     }
     const p = await prisma.pedidoEs.findUnique({ where: { id: pedidoId }, select: { nome: true, email: true, idioma: true } });
@@ -50,6 +54,7 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
         email: p.email.split("?")[0],
         idioma: p.idioma || "es",
         video_link: linkFotosEs(token),
+        ...(lookalike ? { modelo: "cartoon", max_fotos: 3, prazo_min: ESPERA_FOTOS_MIN } : {}),
       }),
       signal: AbortSignal.timeout(6000),
     });
