@@ -29,7 +29,7 @@ export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Pr
     if (v && ehCartoon(v.opcoes) && !(v.opcoes as any).lookalike) return "cartoon_sem_fotos";
     if (v && v.producao !== "aguardando_fotos") return "ja_tem_fotos";
 
-    // Order 1 Plus ("lookalike") tem e-mail próprio: 1 a 15 fotos na moldura, prazo de
+    // Vídeo com letra (Order 1, "lookalike" = pede fotos) tem e-mail próprio: 1 a 15 fotos na moldura, prazo de
     // ESPERA_FOTOS_MIN — fluxo "ES - Confirmação Lookalike". O vídeo de fotos usa o de sempre.
     const lookalike = !!v && ehCartoon(v.opcoes);
     const variavel = lookalike ? "ES_N8N_FOTOS_LOOKALIKE_WEBHOOK_URL" : "ES_N8N_FOTOS_WEBHOOK_URL";

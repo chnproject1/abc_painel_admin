@@ -31,8 +31,8 @@ export type OfertasEs = {
   bump2?: string | null;           // order bump 2 do checkout (livre, próximo produto)
 };
 
-/* Order 1 = vídeo com a letra animada ("video"); Order 1 Plus = + fotos na moldura
-   ("lookalike", até 15). Cobrado junto com a música, então está pago quando o pedido está pago.
+/* Order 1 = vídeo com a letra animada + até 15 fotos na moldura ("video"; os pedidos
+   antigos têm "video,lookalike", do tempo do +US$3). Cobrado junto com a música, então está pago quando o pedido está pago.
    O nome interno "cartoon"/"lookalike" ficou do primeiro formato do vídeo. */
 export const ESPERA_FOTOS_MIN = 120;   // Plus: espera as fotos até isso; depois o vídeo sai sem fotos
 export function bumpTem(o: OfertasEs, item: "video" | "lookalike"): boolean {
@@ -72,7 +72,9 @@ export function liberacoes(o: OfertasEs) {
   const video  = extra && !o.estilo2;
   // Vídeo com letra (Order 1): só a música principal vira vídeo — nunca a do estilo extra
   const video_cartoon = o.status === "pago" && bumpTem(o, "video");
-  const lookalike = video_cartoon && bumpTem(o, "lookalike");
+  // Desde 2026-10-16 o vídeo vem SEMPRE com as fotos (até 15): o +US$3 do Plus saiu.
+  // "lookalike" no bump1 só aparece nos pedidos antigos e dá no mesmo.
+  const lookalike = video_cartoon;
   return { pagina, video, estilo, video_cartoon, lookalike, ds_tipo: ds ? dsTipoDe(o) : null };
 }
 

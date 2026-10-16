@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     const v = validarFotos(data.fotos, t);
     if (!v.ok) return erro(v.erro);
 
-    // vídeo com letra (Order 1 Plus): até 15 fotos na moldura (validarFotos); mantém a marca do vídeo
+    // vídeo com letra (Order 1): até 15 fotos na moldura (validarFotos); mantém a marca do vídeo
     const cartoon = ehCartoon(video.opcoes);
     const opcoes = cartoon ? (video.opcoes as any)
       : data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
