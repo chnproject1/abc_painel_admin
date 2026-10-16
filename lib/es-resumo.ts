@@ -1,4 +1,4 @@
-import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { VIDEO_TRAVADO_MIN_ES } from "@/lib/video-estado";
 
 /*
   Resumo da operação ES (LATAM) — as regras de cada número da visão geral do
@@ -22,7 +22,7 @@ type Where = Record<string, unknown>;
    entraria na conta. */
 const naoPago = (campo: string): Where => ({ OR: [{ [campo]: null }, { [campo]: { not: "pago" } }] });
 
-const travadoDesde = () => new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+const travadoDesde = () => new Date(Date.now() - VIDEO_TRAVADO_MIN_ES * 60000);
 
 /* Qual downsell foi — mesma regra de dsTipoDe (lib/es-ofertas.ts) */
 const DS1: Where = { ds_status: "pago", up2_status: "pago", AND: [naoPago("up1_status")] };
@@ -83,7 +83,7 @@ export const FILTROS_ES: Record<string, () => Where> = {
   video_producao:   () => video({ producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } }),
   // Pendente = tudo que não foi entregue (sem fotos, produzindo, pronto sem e-mail), menos erro
   video_pendentes:  () => video({ entrega_email: false, OR: [
-    { producao: { in: ["aguardando_fotos", "concluido"] } },
+    { producao: { in: ["aguardando_fotos", "aguardando_musica", "concluido"] } },
     { producao: { in: ["fotos_enviadas", "renderizando"] }, atualizado_em: { gte: travadoDesde() } },
   ] }),
   video_entregue:   () => ({ ...VENDA, video: { is: { entrega_email: true } } }),

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TOKEN_RE, validarFotos } from "@/lib/video";
-import { dispararProducaoVideoEs } from "@/lib/video-es-producao";
+import { dispararProducaoVideoEs, ehCartoon } from "@/lib/video-es-producao";
 
 /*
   API da tabela PedidoVideoEs pras páginas /fotos-es e /video-es.
@@ -96,7 +96,11 @@ export async function POST(req: NextRequest) {
     const v = validarFotos(data.fotos, t);
     if (!v.ok) return erro(v.erro);
 
-    const opcoes = data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
+    // vídeo cartoon (lookalike): até 3 fotos, só de referência para o avatar; mantém a marca do cartoon
+    const cartoon = ehCartoon(video.opcoes);
+    if (cartoon && v.fotos.length > 3) return erro("máximo de 3 fotos");
+    const opcoes = cartoon ? (video.opcoes as any)
+      : data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
 
     const atualizado = await prisma.pedidoVideoEs.update({
       where: { token: t },

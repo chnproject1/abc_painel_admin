@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WHERE_VIDEO_LIBERADO, WHERE_SEM_RASTREIO } from "@/lib/es-ofertas";
-import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { VIDEO_TRAVADO_MIN_ES } from "@/lib/video-estado";
 
 // A operação ES (LATAM) nasce junto com o portal, então não existe corte de data
 // como o INICIO_AUTOMACAO da operação BR.
@@ -36,8 +36,8 @@ const ERRO = {
 };
 
 /* Vídeo: mesma leitura de estado do BR (lib/video-estado.ts). Travado =
-   renderizando (ou na fila) há mais de VIDEO_TRAVADO_MIN sem atualização. */
-const travadoDesde = () => new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+   renderizando (ou na fila) há mais de VIDEO_TRAVADO_MIN_ES sem atualização. */
+const travadoDesde = () => new Date(Date.now() - VIDEO_TRAVADO_MIN_ES * 60000);
 const VIDEO_PENDENTE_ENVIO = { video: { is: { producao: "concluido", entrega_email: false } } };
 const VIDEO_ERRO = () => ({
   video: { is: { OR: [

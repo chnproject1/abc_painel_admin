@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { FILTROS_ES } from "@/lib/es-resumo";
-import { dispararPaginaEs, refazerVideoEs, dispararEstiloEs } from "@/lib/video-es-producao";
+import { dispararPaginaEs, refazerVideoEs, dispararEstiloEs, dispararCartoonEs } from "@/lib/video-es-producao";
+import { ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
 
 /**
  * Reprocessa geração e envio da operação ES — o que travou no caminho.
@@ -19,6 +20,9 @@ import { dispararPaginaEs, refazerVideoEs, dispararEstiloEs } from "@/lib/video-
  *   estilo  comprou o estilo, música 1 pronta, estilo não     30 min    2 (gasta Suno)
  *           gerado nem entregue (inclusive erro de geração)
  *   video   erro, ou parado em produção > VIDEO_TRAVADO_MIN   —         3
+ *   cartoon vídeo cartoon (bump) que não saiu: lookalike sem    —         3
+ *           fotos depois de ESPERA_FOTOS_MIN (vai com avatar aleatório) ou
+ *           esperando com a música pronta há > 30 min (disparo perdido)
  *
  * "Espera" conta da compra e também do último reprocesso da mesma etapa, pra
  * não disparar de novo antes do fluxo anterior terminar. Passou do limite,
@@ -33,6 +37,7 @@ const ETAPAS = {
   pagina: { espera: 30, limite: 3, coluna: "reprocesso_pagina" },
   video:  { espera: 0,  limite: 3, coluna: "reprocesso_video" },
   estilo: { espera: 30, limite: 2, coluna: "up_tentativa_geracao" },
+  cartoon: { espera: 0, limite: 3, coluna: "reprocesso_video" },
 } as const;
 type Etapa = keyof typeof ETAPAS;
 
@@ -74,6 +79,7 @@ const DISPARO: Record<Etapa, (id: string) => Promise<string>> = {
   pagina: (id) => dispararPaginaEs(id),
   video:  (id) => refazerVideoEs(id),
   estilo: (id) => dispararEstiloEs(id, true),
+  cartoon: (id) => dispararCartoonEs(id),
 };
 
 /** Quem está travado em cada etapa (as regras de "pendente"/"erro" do painel + espera e limite) */
@@ -88,6 +94,13 @@ function ondeTravado(etapa: Etapa) {
     : etapa === "pagina" ? { AND: [FILTROS_ES.pagina_pendente()], link_pagina: { not: null } }
     // atualizado_em: o music_ready (que dispara o estilo) mexe na linha — sem
     // isto, um estilo disparado há 2 min seria disparado de novo (Suno em dobro)
+    : etapa === "cartoon" ? { status: "pago", link_audio: { not: null }, video: { is: {
+        opcoes: { path: ["modelo"], equals: "cartoon" },
+        OR: [
+          { producao: "aguardando_fotos", criado_em: { lt: minAtras(ESPERA_FOTOS_MIN) } },
+          { producao: { in: ["aguardando_musica", "fotos_enviadas"] }, atualizado_em: { lt: minAtras(30) } },
+        ],
+      } } }
     : etapa === "estilo" ? { AND: [FILTROS_ES.estilo()], status: "pago", link_audio: { not: null }, up_gerou_musica: false, up_entrega_email: false, atualizado_em: { lt: minAtras(espera) } }
     : { AND: [FILTROS_ES.video_erro()], link_audio: { not: null } };
   return { AND: [regra, ...naoRecente, { [coluna]: { lt: limite } }] };

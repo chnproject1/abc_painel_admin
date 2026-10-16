@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe } from "@/lib/es-ofertas";
-import { avisarVideoLiberadoEs, dispararPaginaEs, dispararEstiloEs } from "@/lib/video-es-producao";
+import { avisarVideoLiberadoEs, dispararPaginaEs, dispararEstiloEs, garantirVideoCartoonEs, ehCartoon } from "@/lib/video-es-producao";
 import { marcarRastreio } from "@/lib/es-rastreio";
 
 /**
@@ -54,6 +54,9 @@ const MAPA_FUNIL: Record<string, string> = {
   status: "status",
   estilo: "estilo",   letra: "letra",   idioma: "idioma",
   estilo2: "estilo2",
+  // order bumps do checkout: produto marcado em cada um ("video", "lookalike") e o valor em US$
+  bump1: "bump1", bump1_valor: "bump1_valor",
+  bump2: "bump2", bump2_valor: "bump2_valor",
   nomefiscal: "nomefiscal",
   comprador: "comprador",
   zip: "zip_code",    zip_code: "zip_code",
@@ -259,6 +262,13 @@ export async function GET(req: NextRequest) {
       entrega_pagina,
       entrega_video,
       entrega_estilo,
+      // Vídeo cartoon (order bump) — só da música principal
+      bump1: p.bump1, bump1_valor: p.bump1_valor,
+      bump2: p.bump2, bump2_valor: p.bump2_valor,
+      entrega_video_cartoon: lib.video_cartoon && !!p.video && ehCartoon(p.video.opcoes),
+      video_lookalike:       lib.lookalike,
+      video_fotos:           p.video && ehCartoon(p.video.opcoes) && Array.isArray(p.video.fotos)
+                               ? (p.video.fotos as any[]).map((f) => urlPublica(f.path)).filter(Boolean) : [],
       ds_tipo: p.ds_status === "pago" ? dsTipoDe(p) : null,
       funil_completo,
 
@@ -273,6 +283,7 @@ export async function GET(req: NextRequest) {
       // Produção — música 1
       gerou_musica: p.gerou_musica,
       song_id:      p.song_id,
+      suno_task_id: p.suno_task_id,   // vídeo cartoon: letra com tempos pela API do Suno
       link_pagina:  p.link_pagina,
       link_basica:  p.link_basica,
       link_audio:   p.link_audio,
@@ -366,6 +377,11 @@ export async function POST(req: NextRequest) {
       ip:           data.ip          || null,
       funil:        data.funil       || null,
       recovery_id:  data.recovery_id || null,
+      // order bump marcado na oferta (vai na mesma cobrança da Stripe)
+      bump1:        data.bump1       || null,
+      bump1_valor:  valorNumerico(data.bump1_valor) ?? null,
+      bump2:        data.bump2       || null,
+      bump2_valor:  valorNumerico(data.bump2_valor) ?? null,
     };
 
     const pedido = await prisma.pedidoEs.upsert({
@@ -464,6 +480,8 @@ export async function POST(req: NextRequest) {
       },
     });
     if (merge.status === "pago") await marcarOriginalRecuperado(pedido.id);
+    // pagamento com order bump de vídeo: cria a linha do vídeo cartoon (idempotente)
+    if (merge.status === "pago" || merge.bump1 || merge.bump2) await garantirVideoCartoonEs(pedido.id);
     const video = await garantirVideo(pedido.id, pedido);
     // Compra da página / do estilo acabou de entrar: se a música já existe, sai agora
     if (!liberacoes(atual).pagina && liberacoes(pedido).pagina) await dispararPaginaEs(pedido.id);
@@ -556,7 +574,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  if (data.action === "pago") await marcarOriginalRecuperado(pedido.id);
+  if (data.action === "pago") { await marcarOriginalRecuperado(pedido.id); await garantirVideoCartoonEs(pedido.id); }
   const lib = liberacoes(pedido);
   const video = await garantirVideo(pedido.id, pedido);
   // Compra da página acabou de entrar: se a música já existe, envia agora

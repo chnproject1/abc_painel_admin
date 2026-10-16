@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { selectPorRoleUs } from "@/lib/columns";
 import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
+import { ehCartoon } from "@/lib/video-es-producao";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     aberto_em: v.aberto_em, fotos_em: v.fotos_em, concluido_em: v.concluido_em, entregue_em: v.entregue_em,
     atualizado_em: v.atualizado_em, criado_em: v.criado_em,
     link: linkFotosEs(v.token), ver_link: linkVerVideoEs(v.token), video_url: urlPublica(v.video_path),
+    // vídeo cartoon (order bump) ou vídeo com fotos (funil antigo)
+    cartoon: ehCartoon(v.opcoes), lookalike: ehCartoon(v.opcoes) && !!(v.opcoes as any).lookalike,
   } : null;
   return NextResponse.json({ ...pedido, video });
 }

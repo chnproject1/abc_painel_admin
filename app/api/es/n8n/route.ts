@@ -221,6 +221,7 @@ export async function POST(req: NextRequest) {
         gerou_musica: true,
         erro_geracao: false,
         song_id:      txt(data.song_id),
+        suno_task_id: txt(data.suno_task_id),
         link_pagina:  txt(data.link_pagina),
         link_basica:  txt(data.link_basica),
         link_audio:   txt(data.link_audio),
@@ -329,7 +330,7 @@ export async function POST(req: NextRequest) {
       data: update,
       select: {
         id: true, plano: true, status: true,
-        up1_status: true, up2_status: true, ds_status: true, estilo2: true,
+        up1_status: true, up2_status: true, ds_status: true, estilo2: true, bump1: true, bump2: true,
         gerou_musica: true, erro_geracao: true, entrega_email: true,
         pagina_entrega_email: true,
         up_gerou_musica: true, up_erro_geracao: true, up_entrega_email: true,
@@ -348,7 +349,9 @@ export async function POST(req: NextRequest) {
     if (action === "music_ready") {
       const novo = txt(data.link_audio);
       const regenerada = Boolean(antes?.link_audio && novo && novo !== antes.link_audio);
-      if (lib.video)  video_disparo  = regenerada ? await refazerVideoEs(id) : await dispararProducaoVideoEs(id);
+      // vídeo de fotos (funil antigo) ou vídeo cartoon (bump) — os dois só da música PRINCIPAL;
+      // o up_music_ready (música do estilo extra) nunca dispara vídeo
+      if (lib.video || lib.video_cartoon) video_disparo = regenerada ? await refazerVideoEs(id) : await dispararProducaoVideoEs(id);
       if (lib.pagina) pagina_disparo = await dispararPaginaEs(id, regenerada);
       // O estilo usa a letra, não o MP3: regenerar a música 1 não refaz o estilo
       if (lib.estilo && !regenerada) estilo_disparo = await dispararEstiloEs(id);

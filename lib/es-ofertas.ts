@@ -22,11 +22,21 @@
 export type StatusOferta = string | null | undefined;
 
 export type OfertasEs = {
+  status?: StatusOferta;           // venda da frente (o bump vai junto dela)
   up1_status?: StatusOferta;
   up2_status?: StatusOferta;
   ds_status?: StatusOferta;
   estilo2?: string | null;
+  bump1?: string | null;           // order bump 1 do checkout (produto): "video"
+  bump2?: string | null;           // order bump 2 do checkout (produto): "lookalike"
 };
+
+/* Order bump de vídeo cartoon: cobrado junto com a música, então está pago quando o
+   pedido está pago. Lookalike = avatar parecido com a pessoa, pelas fotos (até 3). */
+export const ESPERA_FOTOS_MIN = 60;   // lookalike: espera as fotos até isso; depois sai com avatar aleatório
+export function bumpTem(o: OfertasEs, item: "video" | "lookalike"): boolean {
+  return [o.bump1, o.bump2].some((b) => String(b || "").trim() === item);
+}
 
 export type DsTipo = "ds1" | "ds2" | "ds3";
 
@@ -58,7 +68,10 @@ export function liberacoes(o: OfertasEs) {
   const extra  = o.up2_status === "pago" || (ds && o.up2_status !== "pago");
   const estilo = extra && !!o.estilo2;
   const video  = extra && !o.estilo2;
-  return { pagina, video, estilo, ds_tipo: ds ? dsTipoDe(o) : null };
+  // Vídeo cartoon (bump): só a música principal vira vídeo — nunca a do estilo extra
+  const video_cartoon = o.status === "pago" && bumpTem(o, "video");
+  const lookalike = video_cartoon && bumpTem(o, "lookalike");
+  return { pagina, video, estilo, video_cartoon, lookalike, ds_tipo: ds ? dsTipoDe(o) : null };
 }
 
 /** Sufixos do plano acompanham as ofertas pagas. O downsell entra com o número

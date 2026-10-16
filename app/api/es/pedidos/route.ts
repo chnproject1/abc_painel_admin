@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WHERE_VIDEO_LIBERADO, WHERE_SEM_RASTREIO } from "@/lib/es-ofertas";
 import { FILTROS_ES } from "@/lib/es-resumo";
-import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { VIDEO_TRAVADO_MIN_ES } from "@/lib/video-estado";
 
 const LIMIT = 50;
 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       where.video = { is: { producao: "concluido", entrega_email: false } };
       break;
     case "video_erro": {
-      const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+      const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN_ES * 60000);
       where.status = "pago";
       where.video = { is: { OR: [
         { producao: "erro" },

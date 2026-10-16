@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { linkFotosEs } from "@/lib/video";
+import { linkFotosEs, gerarToken } from "@/lib/video";
+import { liberacoes, ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
+
+/** Vídeo cartoon (order bump) mora na mesma tabela do vídeo de fotos, marcado em opcoes. */
+export function ehCartoon(opcoes: unknown): boolean {
+  return !!opcoes && typeof opcoes === "object" && (opcoes as any).modelo === "cartoon";
+}
 
 /*
   Avisa o n8n (fluxo `es-video-fotos-link`) que a venda acabou de liberar o
@@ -19,7 +25,8 @@ export const CONFIRMACAO_MAX_TENTATIVAS = 3;
 
 export async function avisarVideoLiberadoEs(pedidoId: string, token: string): Promise<string> {
   try {
-    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedidoId }, select: { producao: true } });
+    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedidoId }, select: { producao: true, opcoes: true } });
+    if (v && ehCartoon(v.opcoes) && !(v.opcoes as any).lookalike) return "cartoon_sem_fotos";
     if (v && v.producao !== "aguardando_fotos") return "ja_tem_fotos";
 
     const url = process.env.ES_N8N_FOTOS_WEBHOOK_URL;
@@ -74,9 +81,10 @@ export async function dispararProducaoVideoEs(pedidoId: string): Promise<string>
   try {
     const v = await prisma.pedidoVideoEs.findUnique({
       where: { pedido_id: pedidoId },
-      select: { producao: true, fotos: true, pedido: { select: { link_audio: true } } },
+      select: { producao: true, fotos: true, opcoes: true, pedido: { select: { link_audio: true } } },
     });
     if (!v) return "sem_video";
+    if (ehCartoon(v.opcoes)) return dispararCartoonEs(pedidoId);   // nunca no render de fotos
     if (v.producao !== "fotos_enviadas") return `producao=${v.producao}`;
     if (!Array.isArray(v.fotos) || v.fotos.length === 0) return "sem_fotos";
     if (!v.pedido.link_audio) return "sem_musica";   // a música dispara quando ficar pronta
@@ -114,8 +122,9 @@ export async function dispararProducaoVideoEs(pedidoId: string): Promise<string>
 */
 export async function refazerVideoEs(pedidoId: string): Promise<string> {
   try {
-    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedidoId }, select: { producao: true, fotos: true } });
+    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedidoId }, select: { producao: true, fotos: true, opcoes: true } });
     if (!v) return "sem_video";
+    if (ehCartoon(v.opcoes)) return dispararCartoonEs(pedidoId, true);   // música nova → vídeo cartoon de novo
     if (!Array.isArray(v.fotos) || v.fotos.length === 0) return "sem_fotos";
     await prisma.pedidoVideoEs.update({
       where: { pedido_id: pedidoId },
@@ -227,6 +236,91 @@ export async function dispararEstiloEs(pedidoId: string, forcar = false): Promis
     return r.ok ? "disparado" : `n8n_${r.status}`;
   } catch (e: any) {
     console.error("[estilo-es] falha ao disparar o estilo:", pedidoId, e?.message);
+    return "erro";
+  }
+}
+
+/*
+  VÍDEO CARTOON (order bump do checkout) — fluxo n8n "ES - Vídeo Cartoon"
+  (ES_N8N_VIDEO_CARTOON_WEBHOOK_URL). SÓ a música principal vira vídeo: quem
+  dispara é o music_ready, nunca o up_music_ready da música do estilo extra.
+
+  Estados (PedidoVideoEs.producao):
+    aguardando_musica  sem lookalike, esperando a música principal
+    aguardando_fotos   lookalike, esperando as fotos (até ESPERA_FOTOS_MIN; depois avatar aleatório)
+    fotos_enviadas     lookalike com fotos, esperando a música
+    renderizando → concluido | erro   (o n8n e o cartoon-render marcam)
+*/
+
+/** Cria a linha do vídeo cartoon quando o pedido pago tem o bump. Idempotente. */
+export async function garantirVideoCartoonEs(pedidoId: string): Promise<string> {
+  try {
+    const p = await prisma.pedidoEs.findUnique({ where: { id: pedidoId }, select: { status: true, bump1: true, bump2: true, video: { select: { pedido_id: true } } } });
+    if (!p) return "sem_pedido";
+    const lib = liberacoes(p);
+    if (!lib.video_cartoon) return "sem_bump";
+    if (p.video) return "ja_existe";
+    const v = await prisma.pedidoVideoEs.create({
+      data: {
+        pedido_id: pedidoId, token: gerarToken(),
+        opcoes: { modelo: "cartoon", lookalike: lib.lookalike },
+        producao: lib.lookalike ? "aguardando_fotos" : "aguardando_musica",
+      },
+      select: { token: true },
+    });
+    // lookalike: e-mail "sube tus fotos" com o link da página de fotos, na hora
+    if (lib.lookalike) await avisarVideoLiberadoEs(pedidoId, v.token);
+    // a música pode já estar pronta (silver): tenta disparar agora
+    await dispararCartoonEs(pedidoId);
+    return "criado";
+  } catch (e: any) {
+    console.error("[cartoon-es] falha ao criar o vídeo:", pedidoId, e?.message);
+    return "erro";
+  }
+}
+
+/**
+ * Dispara o vídeo cartoon quando dá: pedido pago, música principal pronta e, no
+ * lookalike, fotos recebidas ou prazo de ESPERA_FOTOS_MIN vencido. `forcar` (refazer,
+ * música regenerada, reprocesso de erro) ignora o estado atual. Nunca lança.
+ */
+export async function dispararCartoonEs(pedidoId: string, forcar = false): Promise<string> {
+  try {
+    const v = await prisma.pedidoVideoEs.findUnique({
+      where: { pedido_id: pedidoId },
+      select: { producao: true, fotos: true, opcoes: true, criado_em: true, pedido: { select: { status: true, link_audio: true } } },
+    });
+    if (!v || !ehCartoon(v.opcoes)) return "nao_cartoon";
+    if (v.pedido.status !== "pago") return "nao_pago";
+    if (!v.pedido.link_audio) return "sem_musica";   // o music_ready dispara depois
+    const lookalike = !!(v.opcoes as any).lookalike;
+    const temFotos = Array.isArray(v.fotos) && v.fotos.length > 0;
+    const venceu = Date.now() - v.criado_em.getTime() > ESPERA_FOTOS_MIN * 60000;
+    if (lookalike && !temFotos && !venceu && !forcar) return "aguardando_fotos";
+    if (!forcar && !["aguardando_musica", "aguardando_fotos", "fotos_enviadas"].includes(v.producao)) return `producao=${v.producao}`;
+
+    const url = process.env.ES_N8N_VIDEO_CARTOON_WEBHOOK_URL;
+    if (!url) {
+      console.error("[cartoon-es] ES_N8N_VIDEO_CARTOON_WEBHOOK_URL não configurada — vídeo não disparado:", pedidoId);
+      return "sem_url";
+    }
+    // marca antes de chamar: music_ready e fotos chegando juntos não disparam duas vezes
+    await prisma.pedidoVideoEs.update({
+      where: { pedido_id: pedidoId },
+      data: { producao: "renderizando", erro_msg: null, entrega_email: false, concluido_em: null },
+    });
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId, payment_id: pedidoId, tipo: "video_cartoon" }),
+      signal: AbortSignal.timeout(8000),
+    });
+    console.log("[cartoon-es] vídeo disparado:", pedidoId, lookalike ? (temFotos ? "(com fotos)" : "(sem fotos: avatar aleatório)") : "", "| n8n", r.status);
+    if (!r.ok) await prisma.pedidoVideoEs.update({ where: { pedido_id: pedidoId }, data: { producao: "erro", erro_msg: `n8n recusou o disparo (${r.status})` } });
+    return r.ok ? "disparado" : `n8n_${r.status}`;
+  } catch (e: any) {
+    console.error("[cartoon-es] falha ao disparar:", pedidoId, e?.message);
+    await prisma.pedidoVideoEs.update({ where: { pedido_id: pedidoId }, data: { producao: "erro", erro_msg: `disparo: ${e?.message}` } }).catch(() => {});
     return "erro";
   }
 }

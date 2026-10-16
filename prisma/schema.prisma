@@ -210,6 +210,9 @@ model PedidoEs {
   gerou_musica  Boolean   @default(false)
   erro_geracao  Boolean   @default(false)
   song_id       String?
+  // id da tarefa do Suno que gerou a música 1 (vem no music_ready). Com ele + song_id o
+  // vídeo cartoon pega a letra com o tempo de cada palavra direto da API do Suno.
+  suno_task_id  String?
   link_audio    String?
   link_basica   String?
   link_pagina   String?
@@ -272,6 +275,16 @@ model PedidoEs {
   up1_valor     Decimal?  @db.Decimal(10, 2)
   up2_valor     Decimal?  @db.Decimal(10, 2)
   ds_valor      Decimal?  @db.Decimal(10, 2)
+
+  // Order bumps do checkout (cobrados JUNTO com a música, na mesma sessão da Stripe).
+  // Cada coluna guarda o PRODUTO marcado (vazio = não marcou):
+  //   bump1 = "video"     → vídeo cartoon da música principal (US$ 15)
+  //   bump2 = "lookalike" → avatar parecido com a pessoa, pelas fotos (+US$ 3; só com o vídeo)
+  // Pago = pedido pago com o bump. `valor` continua sendo o total; *_valor separa a receita.
+  bump1         String?
+  bump1_valor   Decimal?  @db.Decimal(10, 2)
+  bump2         String?
+  bump2_valor   Decimal?  @db.Decimal(10, 2)
 
   utm_source    String?
   utm_campaign  String?
