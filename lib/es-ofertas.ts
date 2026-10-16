@@ -27,15 +27,16 @@ export type OfertasEs = {
   up2_status?: StatusOferta;
   ds_status?: StatusOferta;
   estilo2?: string | null;
-  bump1?: string | null;           // order bump 1 do checkout (produto): "video"
-  bump2?: string | null;           // order bump 2 do checkout (produto): "lookalike"
+  bump1?: string | null;           // order bump 1 do checkout: "video" | "video,lookalike"
+  bump2?: string | null;           // order bump 2 do checkout (livre, próximo produto)
 };
 
 /* Order bump de vídeo cartoon: cobrado junto com a música, então está pago quando o
    pedido está pago. Lookalike = avatar parecido com a pessoa, pelas fotos (até 3). */
 export const ESPERA_FOTOS_MIN = 60;   // lookalike: espera as fotos até isso; depois sai com avatar aleatório
 export function bumpTem(o: OfertasEs, item: "video" | "lookalike"): boolean {
-  return [o.bump1, o.bump2].some((b) => String(b || "").trim() === item);
+  // cada bump pode trazer mais de um item (bump1 = "video,lookalike")
+  return [o.bump1, o.bump2].flatMap((b) => String(b || "").split(",")).some((x) => x.trim() === item);
 }
 
 export type DsTipo = "ds1" | "ds2" | "ds3";

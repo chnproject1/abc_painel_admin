@@ -80,8 +80,8 @@ interface PedidoEs {
     link: string; ver_link: string; video_url?: string | null;
     cartoon?: boolean; lookalike?: boolean;   // vídeo cartoon (order bump)
   } | null;
-  bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo cartoon)
-  bump2?: string | null; bump2_valor?: string | null;   // order bump 2 (lookalike)
+  bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo cartoon, + lookalike)
+  bump2?: string | null; bump2_valor?: string | null;   // order bump 2 (livre)
 }
 
 interface Toast { tipo: "ok" | "erro"; texto: string }
@@ -280,11 +280,11 @@ export default function PedidoEsPage() {
             <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)}     rastreado={isAdmin ? pedido.rastreado : undefined} />
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
             <OfertaBox titulo="Upsell 2"      descricao={pedido.estilo2 ? `Estilo extra · ${pedido.estilo2}` : temExtras ? "Músicas 2 e 3" : temVideo && !pedido.video?.cartoon ? "Vídeo com fotos" : "Estilo extra"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
-            {pedido.bump1 && (
-              <OfertaBox titulo="Bump 1" descricao={pedido.bump1 === "video" ? "Vídeo cartoon" : pedido.bump1} status={pedido.status} valor={usd(pedido.bump1_valor)} />
+            {pedido.bump1 && pedido.bump1 !== "nao" && (
+              <OfertaBox titulo="Bump 1" descricao={pedido.bump1.includes("lookalike") ? "Vídeo cartoon + lookalike" : pedido.bump1 === "video" ? "Vídeo cartoon" : pedido.bump1} status={pedido.status} valor={usd(pedido.bump1_valor)} />
             )}
-            {pedido.bump2 && (
-              <OfertaBox titulo="Bump 2" descricao={pedido.bump2 === "lookalike" ? "Lookalike (avatar pela foto)" : pedido.bump2} status={pedido.status} valor={usd(pedido.bump2_valor)} />
+            {pedido.bump2 && pedido.bump2 !== "nao" && (
+              <OfertaBox titulo="Bump 2" descricao={pedido.bump2} status={pedido.status} valor={usd(pedido.bump2_valor)} />
             )}
             <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} rastreado={isAdmin ? pedido.ds_rastreado : undefined} />
           </div>

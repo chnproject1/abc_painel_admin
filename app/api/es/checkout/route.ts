@@ -569,14 +569,19 @@ export async function POST(req: NextRequest) {
     data: update,
     select: {
       id: true, plano: true, status: true,
-      up1_status: true, up2_status: true, ds_status: true, estilo2: true,
+      up1_status: true, up2_status: true, ds_status: true, estilo2: true, bump1: true, bump2: true,
       valor: true, up1_valor: true, up2_valor: true, ds_valor: true,
     },
   });
 
   if (data.action === "pago") { await marcarOriginalRecuperado(pedido.id); await garantirVideoCartoonEs(pedido.id); }
   const lib = liberacoes(pedido);
-  const video = await garantirVideo(pedido.id, pedido);
+  // vídeo de fotos (funil antigo) ou, no bump com lookalike, a página de fotos do vídeo cartoon
+  let video: Record<string, unknown> | null = await garantirVideo(pedido.id, pedido);
+  if (!video && lib.lookalike) {
+    const v = await prisma.pedidoVideoEs.findUnique({ where: { pedido_id: pedido.id }, select: { token: true, opcoes: true } });
+    if (v && ehCartoon(v.opcoes)) video = { video_token: v.token, video_link: linkFotosEs(v.token) };
+  }
   // Compra da página acabou de entrar: se a música já existe, envia agora
   if (!liberacoes(atual).pagina && lib.pagina) await dispararPaginaEs(pedido.id);
   if (!liberacoes(atual).estilo && lib.estilo) await dispararEstiloEs(pedido.id);
@@ -585,7 +590,8 @@ export async function POST(req: NextRequest) {
     message: `Ação "${data.action}" aplicada`,
     pedido,
     entrega_pagina: lib.pagina,
-    entrega_video:  lib.video,
+    // true = o cliente tem fotos pra subir (vídeo de fotos, ou lookalike do vídeo cartoon)
+    entrega_video:  lib.video || lib.lookalike,
     entrega_estilo: lib.estilo,
     ds_tipo: lib.ds_tipo,
     // Quando a venda libera o vídeo: pra onde mandar o cliente subir as fotos

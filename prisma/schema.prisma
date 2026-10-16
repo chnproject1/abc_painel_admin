@@ -277,10 +277,12 @@ model PedidoEs {
   ds_valor      Decimal?  @db.Decimal(10, 2)
 
   // Order bumps do checkout (cobrados JUNTO com a música, na mesma sessão da Stripe).
-  // Cada coluna guarda o PRODUTO marcado (vazio = não marcou):
-  //   bump1 = "video"     → vídeo cartoon da música principal (US$ 15)
-  //   bump2 = "lookalike" → avatar parecido com a pessoa, pelas fotos (+US$ 3; só com o vídeo)
-  // Pago = pedido pago com o bump. `valor` continua sendo o total; *_valor separa a receita.
+  // Cada coluna guarda o PRODUTO marcado (vazio ou "nao" = não marcou):
+  //   bump1 = "video" | "video,lookalike" → vídeo cartoon da música principal (US$ 15),
+  //           com a opção lookalike = avatar parecido com a pessoa, pelas fotos (+US$ 3)
+  //   bump2 = livre (próximo order bump)
+  // Pago = pedido pago com o bump. `valor` continua sendo o total; *_valor separa a receita
+  // (bump1_valor = vídeo + lookalike).
   bump1         String?
   bump1_valor   Decimal?  @db.Decimal(10, 2)
   bump2         String?
