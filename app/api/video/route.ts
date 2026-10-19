@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TOKEN_RE, validarFotos, extrairUtm, gerarToken } from "@/lib/video";
+import { ehVideoLetra, dispararVideoBr } from "@/lib/br-bumps";
 
 /*
   API da tabela PedidoVideo pra página /upvideo.
@@ -134,13 +135,17 @@ export async function POST(req: NextRequest) {
   if (acao === "fotos") {
     // Antes de pagar: qualquer estado. Depois de pagar: só se deu erro no
     // render, pra pessoa poder trocar a foto que quebrou.
-    const pode = video.status === "pendente" || video.producao === "erro";
+    // Vídeo com letra (order bump do BR): já nasce pago e espera as fotos — pode mandar
+    // enquanto não começou o render.
+    const letra = ehVideoLetra(video.opcoes);
+    const pode = video.status === "pendente" || video.producao === "erro" || (letra && video.producao === "aguardando_fotos");
     if (!pode) return erro(`não dá pra trocar as fotos com producao=${video.producao}`, 409);
 
     const v = validarFotos(data.fotos, t);
     if (!v.ok) return erro(v.erro);
 
-    const opcoes = data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
+    const opcoes = letra ? (video.opcoes as any)
+      : data.opcoes && typeof data.opcoes === "object" ? { card_nome: Boolean(data.opcoes.card_nome) } : {};
 
     const atualizado = await prisma.pedidoVideo.update({
       where: { token: t },
@@ -153,7 +158,9 @@ export async function POST(req: NextRequest) {
         ...extrairUtm(data.utm),
       },
     });
-    return NextResponse.json({ success: true, status: atualizado.status, producao: atualizado.producao, fotos_qtd: v.fotos.length });
+    // vídeo com letra: se a música já está pronta, entra em produção agora
+    const producao_disparo = letra ? await dispararVideoBr(atualizado.pedido_id) : undefined;
+    return NextResponse.json({ success: true, status: atualizado.status, producao: atualizado.producao, fotos_qtd: v.fotos.length, producao_disparo });
   }
 
   if (acao === "refazer") {

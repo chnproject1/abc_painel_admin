@@ -32,6 +32,11 @@ export const CAMPOS_OPERADOR = [
   "entrega_whatsapp",
   "entrega_email",
   "link_mp4",
+  // order bumps do BR (lib/br-bumps.ts)
+  "bumps",
+  "estilo2",
+  "link_audio2",
+  "bumps_enviados",
 ] as const;
 
 // Campos extras visíveis apenas para ADMIN

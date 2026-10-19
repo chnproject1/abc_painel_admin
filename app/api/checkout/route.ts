@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { aoPagarBr, ehVideoLetra } from "@/lib/br-bumps";
+import { linkVideo } from "@/lib/video";
 
 function limparTelefone(tel: any): string {
   if (!tel) return "";
@@ -54,6 +56,14 @@ export async function GET(req: NextRequest) {
       funil: true,
       valor: true,
       recovery_id: true,
+      // order bumps (QUIZ BR V2) — ver lib/br-bumps.ts
+      bumps: true,
+      estilo2: true,
+      suno_task_id: true,
+      song_id2: true,
+      link_audio2: true,
+      bumps_enviados: true,
+      video: { select: { token: true, opcoes: true, producao: true } },
     },
   });
 
@@ -136,6 +146,17 @@ export async function GET(req: NextRequest) {
       ttclid:            pedido.ttclid,
       pixel_id:          pedido.pixel_id,
       ip:                pedido.ip,
+      // order bumps do BR: item:valor, o estilo extra, a 2ª música e o vídeo com letra
+      bumps:             pedido.bumps,
+      estilo2:           pedido.estilo2,
+      suno_task_id:      pedido.suno_task_id,
+      song_id2:          pedido.song_id2,
+      link_audio2:       pedido.link_audio2,
+      bumps_enviados:    pedido.bumps_enviados,
+      video_letra:       !!pedido.video && ehVideoLetra(pedido.video.opcoes),
+      video_token:       pedido.video?.token ?? null,
+      video_link:        pedido.video ? linkVideo(pedido.video.token) : null,
+      video_producao:    pedido.video?.producao ?? null,
     },
   });
 }
@@ -178,6 +199,9 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
+
+    // Order bump de vídeo (BR): cria o vídeo e pede as fotos. Sem bump, não faz nada.
+    await aoPagarBr(data.id);
 
     // Se veio de recuperação, marca o original como recuperado
     if (pedido?.recovery_id) {
@@ -236,6 +260,8 @@ export async function POST(req: NextRequest) {
       nomefiscal:   data.nomefiscal  || null,
       funil:        data.funil       || null,
       recovery_id:  data.recovery_id || null,
+      bumps:        data.bumps       || null,
+      estilo2:      data.estilo2     || null,
       data_pedido:  new Date(),
     },
     update: {
@@ -261,6 +287,8 @@ export async function POST(req: NextRequest) {
       nomefiscal:   data.nomefiscal  || undefined,
       funil:        data.funil       || undefined,
       recovery_id:  data.recovery_id || undefined,
+      bumps:        data.bumps       || undefined,
+      estilo2:      data.estilo2     || undefined,
     },
   });
 

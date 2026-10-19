@@ -22,6 +22,10 @@ interface Pedido {
   entrega_whatsapp: boolean;
   entrega_email: boolean;
   link_mp4?: string;
+  bumps?: string | null;          // order bumps do BR: "video:29.90,estilo:24.90,pagina:19.90"
+  estilo2?: string | null;
+  link_audio2?: string | null;
+  bumps_enviados?: string | null;
   valor?: string;
   data_pedido?: string;
   rastreado?: boolean;
@@ -342,6 +346,15 @@ export default function PedidoPage() {
                 <Campo label="Plano" valor={pedido.plano} capitalize />
                 <Campo label="Estilo" valor={pedido.estilo} />
               </div>
+              {pedido.bumps && (
+                <Campo label="Order bumps" valor={pedido.bumps.split(",").map((b) => {
+                  const [item, v] = b.split(":");
+                  const nome = item === "video" ? "Vídeo com letra" : item === "estilo" ? `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""}` : item === "pagina" ? "Página Premium" : item;
+                  const feito = item === "video" ? pedido.video?.producao === "concluido" : String(pedido.bumps_enviados || "").split(",").includes(item);
+                  return `${nome} R$ ${v}${feito ? " ✓" : ""}`;
+                }).join(" · ")} />
+              )}
+              {pedido.link_audio2 && <LinkBtn href={pedido.link_audio2} label="🎵 Estilo extra" />}
               {isAdmin && (
                 <div className="grid grid-cols-2 gap-3">
                   {pedido.valor && (

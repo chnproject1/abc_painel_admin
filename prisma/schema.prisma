@@ -61,8 +61,19 @@ model Pedido {
   criado_em        DateTime  @default(now())
   atualizado_em    DateTime  @updatedAt
 
+  // ORDER BUMPS do QUIZ BR V2 (lib/br-bumps.ts), pagos no mesmo Pix da música.
+  // bumps = "video:29.90,estilo:24.90,pagina:19.90" (item:valor em R$). Vazio = sem bump,
+  // e o pedido segue exatamente como antes.
+  bumps            String?
+  estilo2          String?   // estilo extra: o estilo da 2ª música (mesma letra)
+  suno_task_id     String?   // vídeo com letra: letra com tempos pela API do Suno
+  song_id2         String?   // estilo extra: a 2ª música
+  link_audio2      String?
+  bumps_enviados   String?   // itens já entregues: "pagina,estilo"
+
   // Upsell de vídeo (fotos + música). Um por pedido, criado quando o n8n
-  // monta a mensagem da música com o link do upsell.
+  // monta a mensagem da música com o link do upsell. No bump do vídeo com
+  // letra, criado no pagamento (opcoes.modelo = "letra").
   video            PedidoVideo?
 
   @@index([telefone])

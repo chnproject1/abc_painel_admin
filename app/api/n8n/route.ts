@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkVideo, sufixoLink, urlPublica } from "@/lib/video";
+import { aoMusicaProntaBr, marcarEnviadoBr, ehVideoLetra } from "@/lib/br-bumps";
 
 export async function POST(req: NextRequest) {
   const secret = process.env.N8N_CALLBACK_SECRET;
@@ -34,11 +35,31 @@ export async function POST(req: NextRequest) {
           link_audio:   data.link_audio   || undefined,
           link_mp4:     data.link_mp4     || undefined,
           song_id:      data.song_id      || undefined,
+          // vídeo com letra (bump): o task id do Suno dá a letra com tempos
+          suno_task_id: data.suno_task_id || data.task_id || undefined,
           data_entrega: data.data_entrega ? new Date(data.data_entrega) : undefined,
           status:       "pago",
         },
       });
-      return NextResponse.json({ success: true, message: "Música marcada como gerada" });
+      // order bumps (BR): página, estilo extra e vídeo saem quando a música fica pronta
+      const bumps = await aoMusicaProntaBr(id);
+      return NextResponse.json({ success: true, message: "Música marcada como gerada", bumps });
+    }
+
+    // Order bump "estilo extra" (BR): a 2ª música ficou pronta
+    if (action === "estilo_ready") {
+      await prisma.pedido.update({
+        where: { id },
+        data: { song_id2: data.song_id2 || undefined, link_audio2: data.link_audio2 || undefined },
+      });
+      return NextResponse.json({ success: true, message: "Estilo extra gerado" });
+    }
+
+    // Order bump entregue (BR): item = "pagina" | "estilo"
+    if (action === "bump_enviado") {
+      if (!["pagina", "estilo"].includes(data.item)) return NextResponse.json({ success: false, error: "item inválido" }, { status: 400 });
+      await marcarEnviadoBr(id, data.item);
+      return NextResponse.json({ success: true, message: `Bump ${data.item} marcado como enviado` });
     }
 
     if (action === "whats_entregue") {
@@ -97,6 +118,9 @@ export async function POST(req: NextRequest) {
         sufixo: sufixoLink(link),
         status: video.status,
         producao: video.producao,
+        // false = o cliente JÁ tem o vídeo (order bump do vídeo com letra, ou upsell de
+        // vídeo pago): o fluxo de envio da música não manda a oferta do upsell.
+        oferecer_upsell: !(ehVideoLetra(video.opcoes) || video.status === "pago"),
       });
     }
 
