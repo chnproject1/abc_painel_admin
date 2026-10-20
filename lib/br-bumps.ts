@@ -164,9 +164,9 @@ export async function marcarEnviadoBr(pedidoId: string, item: string): Promise<v
 export type ItemEnvio = "musica" | "pagina" | "estilo" | "video" | "geral";
 
 /**
- * Botões do painel. "tudo" (Enviar tudo) chama o fluxo "BR - Envio" (N8N_WEBHOOK_ENVIO_URL),
- * que manda a música e todo item já criado (página, estilo, vídeo) — WhatsApp de cada um e
- * um e-mail só. "Reenviar" de uma linha chama o fluxo daquele item com `forcar`. Nada é
+ * Botões do painel. "tudo" (Enviar) chama o envio da música de sempre (N8N_WEBHOOK_ENVIO_URL);
+ * "geral" (Envio geral, só com order bump) manda UM e-mail com a música e todo item já criado;
+ * "Reenviar" de uma linha chama o fluxo daquele item com `forcar`. Nada é
  * gerado de novo — o estilo só regera se o pedido não tem a página da 2ª música (pedido antigo).
  */
 export async function reenviarBr(pedidoId: string, item: ItemEnvio | "tudo"): Promise<Record<string, string>> {

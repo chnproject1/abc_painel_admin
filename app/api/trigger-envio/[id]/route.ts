@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const r = await reenviarBr(id, item);
   if (r.pedido) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
 
-  const NOME: Record<string, string> = { tudo: "música e itens já criados", geral: "e-mail com tudo", musica: "música", pagina: "página", estilo: "estilo extra", video: "vídeo" };
+  const NOME: Record<string, string> = { tudo: "música", geral: "e-mail com tudo", musica: "música", pagina: "página", estilo: "estilo extra", video: "vídeo" };
   const enviados = Object.keys(r).filter((k) => r[k] === "disparado");
   const falhas = Object.keys(r).filter((k) => r[k] !== "disparado" && r[k] !== "nao_gerado");
   if (falhas.length) {

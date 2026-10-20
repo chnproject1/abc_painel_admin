@@ -148,7 +148,7 @@ export default function PedidoPage() {
     }
   }
 
-  /* item: "tudo" (botão Enviar tudo) ou uma linha das Entregas. Só reenvia o que
+  /* item: "tudo" (botão Enviar, a música), "geral" (Envio geral) ou uma linha das Entregas. Só reenvia o que
      já foi gerado — nada vai de novo pra Suno nem pro render. */
   async function acionarEnvio(item = "tudo") {
     setEnviando(item);
@@ -363,20 +363,21 @@ export default function PedidoPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Entregas</h2>
             <div className="flex flex-wrap gap-2">
-              {/* Envio geral: um e-mail só com tudo (fluxo "BR - Envio Geral") · Enviar tudo: WhatsApp de cada item + e-mail ("BR - Envio") */}
-              <button
+              {/* Envio geral (só com order bump): um e-mail só com a música e os itens já criados ("BR - Envio Geral").
+                  Enviar: o envio da música de sempre (WhatsApp + e-mail). */}
+              {pedido.bumps && <button
                 onClick={() => acionarEnvio("geral")}
                 disabled={!!enviando}
                 className="shrink-0 border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
               >
                 {enviando === "geral" ? "Enviando..." : "✉️ Envio geral"}
-              </button>
+              </button>}
               <button
                 onClick={() => acionarEnvio("tudo")}
                 disabled={!!enviando}
                 className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
               >
-                {enviando === "tudo" ? "Enviando..." : "Enviar tudo"}
+                {enviando === "tudo" ? "Enviando..." : "Enviar"}
               </button>
             </div>
           </div>
@@ -388,7 +389,7 @@ export default function PedidoPage() {
           <div className="divide-y divide-gray-100">
             {linhas.map((l) => (
               <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} whats={l.whats} email={l.email} href={l.href}
-                /* a música sai pelo "Enviar tudo" / "Envio geral" */
+                /* a música sai pelo "Enviar" / "Envio geral" */
                 onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
                 enviando={enviando === l.item} />
             ))}
