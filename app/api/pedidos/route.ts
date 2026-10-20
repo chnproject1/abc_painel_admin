@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
       break;
     case "pendentes":
       where.status = "pago";
-      where.entrega_whatsapp = false;
-      where.entrega_email = false;
+      // não entregue — ou algum item com falha de entrega ("estilo.whats!"), mesmo com a música entregue
+      where.OR = [{ entrega_whatsapp: false, entrega_email: false }, { bumps_enviados: { contains: "!" } }];
       where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
     case "erro":

@@ -228,9 +228,29 @@ export default function PedidoPage() {
   // Order bumps (mesmo Pix) e o que já saiu — lib/br-bumps.ts
   const bumps: Record<string, string> = Object.fromEntries(
     String(pedido.bumps || "").split(",").filter(Boolean).map((b) => b.split(":") as [string, string]));
-  const enviados = String(pedido.bumps_enviados || "").split(",");
+  // Entrega por item e canal (tokens em bumps_enviados: "estilo.whats", "video.email!" = erro) — lib/br-bumps.ts
+  const tokens = String(pedido.bumps_enviados || "").split(",");
+  const estado = (item: string, canal: "whats" | "email", legado = false): Estado =>
+    tokens.includes(`${item}.${canal}!`) ? "erro"
+      : tokens.includes(`${item}.${canal}`) || legado || (canal === "whats" && tokens.includes(item)) ? "ok" : null;
   const v = pedido.video;
   const videoLetra = v?.opcoes?.modelo === "letra";
+  const linhas = [
+    { item: "musica", rotulo: "Música", mostra: true, gerado: musicaGerada,
+      whats: estado("musica", "whats", pedido.entrega_whatsapp), email: estado("musica", "email", pedido.entrega_email) },
+    { item: "pagina", rotulo: "Página Premium — bump", mostra: !!bumps.pagina, gerado: !!pedido.link_pagina, href: pedido.link_pagina,
+      whats: estado("pagina", "whats"), email: estado("pagina", "email") },
+    { item: "estilo", rotulo: `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`, mostra: !!bumps.estilo,
+      gerado: !!pedido.link_audio2, href: pedido.link_pagina2 || pedido.link_audio2,
+      whats: estado("estilo", "whats"), email: estado("estilo", "email") },
+    { item: "video", rotulo: `Vídeo com letra — ${bumps.video ? "bump" : "upsell"}`, mostra: !!v && (v.status === "pago" || videoLetra),
+      gerado: v?.producao === "concluido", href: v?.link,
+      whats: estado("video", "whats", !!v?.entrega_whatsapp), email: estado("video", "email") },
+  ].filter((l) => l.mostra);
+  const falhas = linhas.flatMap((l) => [
+    l.whats === "erro" ? `${l.rotulo.split(" — ")[0]} (WhatsApp)` : null,
+    l.email === "erro" ? `${l.rotulo.split(" — ")[0]} (e-mail)` : null,
+  ]).filter(Boolean);
   const real = (x?: string | number | null) => x != null && x !== "" ? `R$ ${Number(x).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : null;
 
   return (
@@ -340,31 +360,38 @@ export default function PedidoPage() {
 
         {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não enviado · verde: enviado */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Entregas</h2>
-            <button
-              onClick={() => acionarEnvio("tudo")}
-              disabled={!!enviando}
-              className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
-            >
-              {enviando === "tudo" ? "Enviando..." : "Enviar tudo"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {/* Envio geral: um e-mail só com tudo (fluxo "BR - Envio Geral") · Enviar tudo: WhatsApp de cada item + e-mail ("BR - Envio") */}
+              <button
+                onClick={() => acionarEnvio("geral")}
+                disabled={!!enviando}
+                className="shrink-0 border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
+              >
+                {enviando === "geral" ? "Enviando..." : "✉️ Envio geral"}
+              </button>
+              <button
+                onClick={() => acionarEnvio("tudo")}
+                disabled={!!enviando}
+                className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
+              >
+                {enviando === "tudo" ? "Enviando..." : "Enviar tudo"}
+              </button>
+            </div>
           </div>
+          {falhas.length > 0 && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 my-2">
+              <strong>Falha de entrega:</strong> {falhas.join(" · ")}
+            </p>
+          )}
           <div className="divide-y divide-gray-100">
-            {/* a música sai pelo "Enviar tudo" (o mesmo fluxo de envio) */}
-            <Entrega label="Música" gerado={musicaGerada} entregue={entregue} />
-            {bumps.pagina && (
-              <Entrega label="Página Premium — bump" gerado={!!pedido.link_pagina} entregue={enviados.includes("pagina")}
-                onReenviar={() => acionarEnvio("pagina")} enviando={enviando === "pagina"} href={pedido.link_pagina} />
-            )}
-            {bumps.estilo && (
-              <Entrega label={`Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`} gerado={!!pedido.link_audio2} entregue={enviados.includes("estilo")}
-                onReenviar={() => acionarEnvio("estilo")} enviando={enviando === "estilo"} href={pedido.link_pagina2 || pedido.link_audio2} />
-            )}
-            {v && (v.status === "pago" || videoLetra) && (
-              <Entrega label={`Vídeo com letra — ${bumps.video ? "bump" : "upsell"}`} gerado={v.producao === "concluido"} entregue={v.entrega_whatsapp}
-                onReenviar={videoLetra ? () => acionarEnvio("video") : undefined} enviando={enviando === "video"} href={v.link} />
-            )}
+            {linhas.map((l) => (
+              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} whats={l.whats} email={l.email} href={l.href}
+                /* a música sai pelo "Enviar tudo" / "Envio geral" */
+                onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
+                enviando={enviando === l.item} />
+            ))}
           </div>
         </section>
 
@@ -580,17 +607,30 @@ function CompraBox({ titulo, descricao, pago, valor }: { titulo: string; descric
   );
 }
 
-function Entrega({ label, gerado, entregue, onReenviar, enviando, href }: {
-  label: string; gerado: boolean; entregue: boolean;
+type Estado = "ok" | "erro" | null;
+
+function Selo({ canal, estado }: { canal: string; estado: Estado }) {
+  const [cor, marca] = estado === "ok" ? ["bg-green-100 text-green-700", "✓"]
+    : estado === "erro" ? ["bg-red-100 text-red-700", "✕"] : ["bg-gray-100 text-gray-400", "—"];
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cor}`}>{marca} {canal}</span>;
+}
+
+function Entrega({ label, gerado, whats, email, onReenviar, enviando, href }: {
+  label: string; gerado: boolean; whats: Estado; email: Estado;
   onReenviar?: () => void; enviando?: boolean; href?: string | null;
 }) {
-  const [cor, texto] = entregue ? ["bg-green-100 text-green-700", "✓ Enviado"]
-    : gerado ? ["bg-yellow-100 text-yellow-800", "Gerado, não enviado"]
-    : ["bg-gray-100 text-gray-500", "Ainda não gerado"];
+  const erro = whats === "erro" || email === "erro";
   return (
-    <div className="py-3 flex flex-wrap items-center gap-2 sm:gap-3">
+    <div className={`py-3 flex flex-wrap items-center gap-2 sm:gap-3 ${erro ? "bg-red-50 -mx-2 px-2 rounded-lg" : ""}`}>
       <p className="text-sm font-medium text-gray-700 flex-1 min-w-[10rem]">{label}</p>
-      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cor}`}>{texto}</span>
+      {gerado ? (
+        <>
+          <Selo canal="WhatsApp" estado={whats} />
+          <Selo canal="E-mail" estado={email} />
+        </>
+      ) : (
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Ainda não gerado</span>
+      )}
       {href && gerado && (
         <a href={href} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">abrir</a>
       )}

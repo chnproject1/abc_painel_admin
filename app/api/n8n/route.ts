@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkVideo, sufixoLink, urlPublica } from "@/lib/video";
-import { aoMusicaProntaBr, marcarEnviadoBr, ehVideoLetra } from "@/lib/br-bumps";
+import { aoMusicaProntaBr, marcarEnviadoBr, marcarEntregaBr, ehVideoLetra } from "@/lib/br-bumps";
 
 export async function POST(req: NextRequest) {
   const secret = process.env.N8N_CALLBACK_SECRET;
@@ -62,23 +62,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: `Bump ${data.item} marcado como enviado` });
     }
 
+    // Resultado da entrega por item e canal (BR): { itens: "musica,pagina" | item, canal: "whats" | "email", ok }
+    if (action === "entrega") {
+      const itens = String(data.itens ?? data.item ?? "").split(",").map((x: string) => x.trim())
+        .filter((x: string) => ["musica", "pagina", "estilo", "video"].includes(x));
+      if (!itens.length || !["whats", "email"].includes(data.canal)) {
+        return NextResponse.json({ success: false, error: "itens/canal inválidos" }, { status: 400 });
+      }
+      const ok = data.ok === true || data.ok === "true";
+      await marcarEntregaBr(id, itens, data.canal, ok);
+      return NextResponse.json({ success: true, message: `Entrega ${data.canal} ${ok ? "ok" : "com erro"}: ${itens.join(", ")}` });
+    }
+
+    // As quatro abaixo são da música (fluxos de hoje): também marcam o erro, que aparece no painel
     if (action === "whats_entregue") {
-      await prisma.pedido.update({ where: { id }, data: { entrega_whatsapp: true } });
+      await marcarEntregaBr(id, ["musica"], "whats", true);
       return NextResponse.json({ success: true, message: "WhatsApp marcado como entregue" });
     }
 
     if (action === "whats_erro") {
-      await prisma.pedido.update({ where: { id }, data: { entrega_whatsapp: false } });
+      await marcarEntregaBr(id, ["musica"], "whats", false);
       return NextResponse.json({ success: true, message: "WhatsApp marcado como erro" });
     }
 
     if (action === "email_entregue") {
-      await prisma.pedido.update({ where: { id }, data: { entrega_email: true } });
+      await marcarEntregaBr(id, ["musica"], "email", true);
       return NextResponse.json({ success: true, message: "Email marcado como entregue" });
     }
 
     if (action === "email_erro") {
-      await prisma.pedido.update({ where: { id }, data: { entrega_email: false } });
+      await marcarEntregaBr(id, ["musica"], "email", false);
       return NextResponse.json({ success: true, message: "Email marcado como erro" });
     }
 
@@ -195,6 +208,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "video_whats_entregue") {
       await prisma.pedidoVideo.update({ where: { pedido_id: id }, data: { entrega_whatsapp: true } });
+      await marcarEntregaBr(id, ["video"], "whats", true);
       return NextResponse.json({ success: true, message: "Vídeo marcado como entregue no WhatsApp" });
     }
 

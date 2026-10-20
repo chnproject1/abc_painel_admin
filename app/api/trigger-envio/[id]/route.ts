@@ -12,14 +12,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const item = (body?.item ?? "tudo") as ItemEnvio | "tudo";
-  if (!["musica", "pagina", "estilo", "video", "tudo"].includes(item)) {
+  if (!["musica", "pagina", "estilo", "video", "tudo", "geral"].includes(item)) {
     return NextResponse.json({ error: `item inválido: ${item}` }, { status: 400 });
   }
 
   const r = await reenviarBr(id, item);
   if (r.pedido) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 });
 
-  const NOME: Record<string, string> = { tudo: "música e itens já criados", musica: "música", pagina: "página", estilo: "estilo extra", video: "vídeo" };
+  const NOME: Record<string, string> = { tudo: "música e itens já criados", geral: "e-mail com tudo", musica: "música", pagina: "página", estilo: "estilo extra", video: "vídeo" };
   const enviados = Object.keys(r).filter((k) => r[k] === "disparado");
   const falhas = Object.keys(r).filter((k) => r[k] !== "disparado" && r[k] !== "nao_gerado");
   if (falhas.length) {

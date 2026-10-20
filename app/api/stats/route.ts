@@ -21,13 +21,13 @@ export async function GET() {
     // Pagaram
     prisma.pedido.count({ where: { ...filtroBase, status: "pago" } }),
 
-    // Pagaram e NÃO foram entregues
+    // Pagaram e NÃO foram entregues — ou algum item falhou na entrega
+    // (bumps_enviados com "!", ex.: "estilo.whats!"), mesmo com a música entregue
     prisma.pedido.count({
       where: {
         ...filtroBase,
         status: "pago",
-        entrega_whatsapp: false,
-        entrega_email: false,
+        OR: [{ entrega_whatsapp: false, entrega_email: false }, { bumps_enviados: { contains: "!" } }],
       },
     }),
 

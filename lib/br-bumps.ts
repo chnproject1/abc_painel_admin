@@ -107,8 +107,7 @@ export async function aoMusicaProntaBr(pedidoId: string): Promise<Record<string,
     const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { bumps: true, bumps_enviados: true, song_id2: true } });
     const b = bumpsDe(p?.bumps);
     if (!p || !Object.keys(b).length) return r;
-    const feitos = String(p.bumps_enviados || "").split(",");
-    if (b.pagina !== undefined && !feitos.includes("pagina")) r.pagina = await chamar("BR_N8N_PAGINA_WEBHOOK_URL", { pedido_id: pedidoId }, "envio da página");
+    if (b.pagina !== undefined && !jaEnviadoBr(p.bumps_enviados, "pagina")) r.pagina = await chamar("BR_N8N_PAGINA_WEBHOOK_URL", { pedido_id: pedidoId }, "envio da página");
     if (b.estilo !== undefined && !p.song_id2) r.estilo = await chamar("BR_N8N_ESTILO_WEBHOOK_URL", { pedido_id: pedidoId }, "estilo extra");
     if (b.video !== undefined) r.video = await dispararVideoBr(pedidoId);
   } catch (e: any) {
@@ -117,15 +116,52 @@ export async function aoMusicaProntaBr(pedidoId: string): Promise<Record<string,
   return r;
 }
 
-/** n8n avisa que entregou um item (pagina | estilo): guarda pra não mandar de novo. */
-export async function marcarEnviadoBr(pedidoId: string, item: string): Promise<void> {
-  const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { bumps_enviados: true } });
-  const lista = new Set(String(p?.bumps_enviados || "").split(",").filter(Boolean));
-  lista.add(item);
-  await prisma.pedido.update({ where: { id: pedidoId }, data: { bumps_enviados: [...lista].join(",") } });
+/*
+  ENTREGAS por item e canal, na coluna bumps_enviados (sem coluna nova):
+    "pagina.whats"   entregue no WhatsApp      "pagina.whats!"  deu erro no WhatsApp
+    "estilo.email"   entregue no e-mail        "video.email!"   deu erro no e-mail
+  item: musica | pagina | estilo | video · canal: whats | email. O token antigo "pagina" /
+  "estilo" (bump_enviado) vale como WhatsApp entregue. A música também atualiza
+  entrega_whatsapp / entrega_email, e o vídeo, PedidoVideo.entrega_whatsapp.
+*/
+export type Canal = "whats" | "email";
+
+/** Já saiu por algum canal (pra não mandar de novo sozinho). */
+export function jaEnviadoBr(lista: string | null | undefined, item: string): boolean {
+  return String(lista || "").split(",").some((t) => t === item || t === `${item}.whats` || t === `${item}.email`);
 }
 
-export type ItemEnvio = "musica" | "pagina" | "estilo" | "video";
+/** Estado de um item num canal, lido dos tokens: "ok" | "erro" | null (não tentou). */
+export function estadoEntregaBr(lista: string | null | undefined, item: string, canal: Canal): "ok" | "erro" | null {
+  const t = String(lista || "").split(",");
+  if (t.includes(`${item}.${canal}!`)) return "erro";
+  if (t.includes(`${item}.${canal}`) || (canal === "whats" && t.includes(item))) return "ok";
+  return null;
+}
+
+/** n8n avisa o resultado da entrega de um ou mais itens num canal. */
+export async function marcarEntregaBr(pedidoId: string, itens: string[], canal: Canal, ok: boolean): Promise<void> {
+  const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { bumps_enviados: true } });
+  if (!p) return;
+  const lista = new Set(String(p.bumps_enviados || "").split(",").filter(Boolean));
+  for (const item of itens) {
+    lista.delete(`${item}.${canal}`); lista.delete(`${item}.${canal}!`);
+    lista.add(ok ? `${item}.${canal}` : `${item}.${canal}!`);
+  }
+  const data: Record<string, unknown> = { bumps_enviados: [...lista].join(",") };
+  if (itens.includes("musica")) data[canal === "whats" ? "entrega_whatsapp" : "entrega_email"] = ok;
+  await prisma.pedido.update({ where: { id: pedidoId }, data });
+  if (ok && canal === "whats" && itens.includes("video")) {
+    await prisma.pedidoVideo.updateMany({ where: { pedido_id: pedidoId }, data: { entrega_whatsapp: true } });
+  }
+}
+
+/** Legado (bump_enviado {item}): o WhatsApp do item saiu. */
+export async function marcarEnviadoBr(pedidoId: string, item: string): Promise<void> {
+  await marcarEntregaBr(pedidoId, [item], "whats", true);
+}
+
+export type ItemEnvio = "musica" | "pagina" | "estilo" | "video" | "geral";
 
 /**
  * Botões do painel. "tudo" (Enviar tudo) chama o fluxo "BR - Envio" (N8N_WEBHOOK_ENVIO_URL),
@@ -139,6 +175,10 @@ export async function reenviarBr(pedidoId: string, item: ItemEnvio | "tudo"): Pr
     select: { link_audio: true, link_pagina: true, song_id2: true, video: { select: { producao: true, opcoes: true } } },
   });
   if (!p) return { pedido: "nao_encontrado" };
+  // Envio geral: um e-mail só com a música e todo item já criado (fluxo "BR - Envio Geral")
+  if (item === "geral") {
+    return { geral: p.link_audio || p.link_pagina ? await chamar("BR_N8N_ENVIO_GERAL_WEBHOOK_URL", { pedido_id: pedidoId }, "envio geral") : "nao_gerado" };
+  }
   if (item === "tudo" || item === "musica") {
     return { tudo: p.link_audio || p.link_pagina ? await chamar("N8N_WEBHOOK_ENVIO_URL", { payment_id: pedidoId, pedido_id: pedidoId }, "envio") : "nao_gerado" };
   }
