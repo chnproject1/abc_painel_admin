@@ -25,12 +25,13 @@ interface Pedido {
   bumps?: string | null;          // order bumps do BR: "video:29.90,estilo:24.90,pagina:19.90"
   estilo2?: string | null;
   link_audio2?: string | null;
+  link_pagina2?: string | null;
   bumps_enviados?: string | null;
   valor?: string;
   data_pedido?: string;
   rastreado?: boolean;
   video?: (VideoResumo & {
-    token: string; valor?: number | null; fotos_qtd: number; tentativas: number; rastreado?: boolean;
+    token: string; valor?: number | null; opcoes?: { modelo?: string } | null; fotos_qtd: number; tentativas: number; rastreado?: boolean;
     enviado_em?: string | null; aberto_em?: string | null; link: string; video_url?: string | null;
   }) | null;
 }
@@ -68,7 +69,7 @@ export default function PedidoPage() {
   const [resultadoNorm, setResultadoNorm] = useState<{ emails: number; telefones: number; nomes: number } | null>(null);
 
   const [acionando, setAcionando] = useState(false);
-  const [enviando, setEnviando] = useState(false);
+  const [enviando, setEnviando] = useState<string | null>(null);   // item em envio: "tudo" | "pagina" | …
   const [cancelando, setCancelando] = useState(false);
   const [refazendoVideo, setRefazendoVideo] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -147,17 +148,23 @@ export default function PedidoPage() {
     }
   }
 
-  async function acionarEnvio() {
-    setEnviando(true);
+  /* item: "tudo" (botão Enviar tudo) ou uma linha das Entregas. Só reenvia o que
+     já foi gerado — nada vai de novo pra Suno nem pro render. */
+  async function acionarEnvio(item = "tudo") {
+    setEnviando(item);
     try {
-      const res = await fetch(`/api/trigger-envio/${id}`, { method: "POST" });
+      const res = await fetch(`/api/trigger-envio/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao acionar envio");
-      mostrarToast("ok", "Música enviada ao cliente!");
+      mostrarToast("ok", `Enviado ao cliente: ${data.enviados.join(", ")}`);
     } catch (e: any) {
-      mostrarToast("erro", e.message || "Erro ao enviar música.");
+      mostrarToast("erro", e.message || "Erro ao enviar.");
     } finally {
-      setEnviando(false);
+      setEnviando(null);
     }
   }
 
@@ -217,6 +224,14 @@ export default function PedidoPage() {
 
   const musicaGerada = pedido.gerou_musica || !!pedido.link_audio || !!pedido.link_pagina;
   const entregue = pedido.entrega_whatsapp || pedido.entrega_email;
+
+  // Order bumps (mesmo Pix) e o que já saiu — lib/br-bumps.ts
+  const bumps: Record<string, string> = Object.fromEntries(
+    String(pedido.bumps || "").split(",").filter(Boolean).map((b) => b.split(":") as [string, string]));
+  const enviados = String(pedido.bumps_enviados || "").split(",");
+  const v = pedido.video;
+  const videoLetra = v?.opcoes?.modelo === "letra";
+  const real = (x?: string | number | null) => x != null && x !== "" ? `R$ ${Number(x).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -309,6 +324,50 @@ export default function PedidoPage() {
           )}
         </div>
 
+        {/* Compras — o que a pessoa pagou: a venda do front (com os bumps no mesmo Pix) e o upsell de vídeo */}
+        {(pedido.bumps || v) && (
+          <section className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Compras</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <CompraBox titulo="Venda inicial" descricao={`Música · ${pedido.plano}`} pago={pedido.status === "pago"} valor={isAdmin ? real(pedido.valor) : null} />
+              {bumps.video && <CompraBox titulo="Bump" descricao="Vídeo com letra" pago={pedido.status === "pago"} valor={real(bumps.video)} />}
+              {bumps.estilo && <CompraBox titulo="Bump" descricao={`Estilo extra${pedido.estilo2 ? ` · ${pedido.estilo2}` : ""}`} pago={pedido.status === "pago"} valor={real(bumps.estilo)} />}
+              {bumps.pagina && <CompraBox titulo="Bump" descricao="Página Premium" pago={pedido.status === "pago"} valor={real(bumps.pagina)} />}
+              {v && !bumps.video && <CompraBox titulo="Upsell" descricao="Vídeo com letra" pago={v.status === "pago"} valor={real(v.valor)} />}
+            </div>
+          </section>
+        )}
+
+        {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não enviado · verde: enviado */}
+        <section className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Entregas</h2>
+            <button
+              onClick={() => acionarEnvio("tudo")}
+              disabled={!!enviando}
+              className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
+            >
+              {enviando === "tudo" ? "Enviando..." : "Enviar tudo"}
+            </button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {/* a música sai pelo "Enviar tudo" (o mesmo fluxo de envio) */}
+            <Entrega label="Música" gerado={musicaGerada} entregue={entregue} />
+            {bumps.pagina && (
+              <Entrega label="Página Premium — bump" gerado={!!pedido.link_pagina} entregue={enviados.includes("pagina")}
+                onReenviar={() => acionarEnvio("pagina")} enviando={enviando === "pagina"} href={pedido.link_pagina} />
+            )}
+            {bumps.estilo && (
+              <Entrega label={`Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`} gerado={!!pedido.link_audio2} entregue={enviados.includes("estilo")}
+                onReenviar={() => acionarEnvio("estilo")} enviando={enviando === "estilo"} href={pedido.link_pagina2 || pedido.link_audio2} />
+            )}
+            {v && (v.status === "pago" || videoLetra) && (
+              <Entrega label={`Vídeo com letra — ${bumps.video ? "bump" : "upsell"}`} gerado={v.producao === "concluido"} entregue={v.entrega_whatsapp}
+                onReenviar={videoLetra ? () => acionarEnvio("video") : undefined} enviando={enviando === "video"} href={v.link} />
+            )}
+          </div>
+        </section>
+
         {/* Grid: Cliente + Pedido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
@@ -346,15 +405,6 @@ export default function PedidoPage() {
                 <Campo label="Plano" valor={pedido.plano} capitalize />
                 <Campo label="Estilo" valor={pedido.estilo} />
               </div>
-              {pedido.bumps && (
-                <Campo label="Order bumps" valor={pedido.bumps.split(",").map((b) => {
-                  const [item, v] = b.split(":");
-                  const nome = item === "video" ? "Vídeo com letra" : item === "estilo" ? `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""}` : item === "pagina" ? "Página Premium" : item;
-                  const feito = item === "video" ? pedido.video?.producao === "concluido" : String(pedido.bumps_enviados || "").split(",").includes(item);
-                  return `${nome} R$ ${v}${feito ? " ✓" : ""}`;
-                }).join(" · ")} />
-              )}
-              {pedido.link_audio2 && <LinkBtn href={pedido.link_audio2} label="🎵 Estilo extra" />}
               {isAdmin && (
                 <div className="grid grid-cols-2 gap-3">
                   {pedido.valor && (
@@ -431,20 +481,6 @@ export default function PedidoPage() {
 
         {/* Ações */}
         <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-          {/* Enviar ao cliente */}
-          <div className="p-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Enviar ao cliente</p>
-              <p className="text-xs text-gray-400 mt-0.5">Envia a música já gerada por WhatsApp e e-mail.</p>
-            </div>
-            <button
-              onClick={acionarEnvio}
-              disabled={enviando}
-              className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
-            >
-              {enviando ? "Enviando..." : "Enviar"}
-            </button>
-          </div>
           {/* Gerar música */}
           <div className="p-5 flex items-center justify-between gap-4">
             <div>
@@ -531,6 +567,42 @@ export default function PedidoPage() {
 }
 
 /* ── Sub-componentes ── */
+
+function CompraBox({ titulo, descricao, pago, valor }: { titulo: string; descricao: string; pago: boolean; valor?: string | null }) {
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 ${pago ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
+      <p className="text-xs text-gray-400">{titulo}</p>
+      <p className="text-sm font-medium text-gray-800">{descricao}</p>
+      <p className={`text-xs font-semibold mt-1 ${pago ? "text-green-700" : "text-gray-500"}`}>
+        {pago ? "✓ Pago" : "Não pagou"}{valor ? ` · ${valor}` : ""}
+      </p>
+    </div>
+  );
+}
+
+function Entrega({ label, gerado, entregue, onReenviar, enviando, href }: {
+  label: string; gerado: boolean; entregue: boolean;
+  onReenviar?: () => void; enviando?: boolean; href?: string | null;
+}) {
+  const [cor, texto] = entregue ? ["bg-green-100 text-green-700", "✓ Enviado"]
+    : gerado ? ["bg-yellow-100 text-yellow-800", "Gerado, não enviado"]
+    : ["bg-gray-100 text-gray-500", "Ainda não gerado"];
+  return (
+    <div className="py-3 flex flex-wrap items-center gap-2 sm:gap-3">
+      <p className="text-sm font-medium text-gray-700 flex-1 min-w-[10rem]">{label}</p>
+      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cor}`}>{texto}</span>
+      {href && gerado && (
+        <a href={href} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">abrir</a>
+      )}
+      {onReenviar && gerado && (
+        <button onClick={onReenviar} disabled={enviando}
+          className="text-xs border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600 disabled:opacity-50 font-medium rounded-md px-2.5 py-1 transition-colors">
+          {enviando ? "..." : "Reenviar"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function StatusIndicator({
   label, ativo, corAtivo, corInativo,

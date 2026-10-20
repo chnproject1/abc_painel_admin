@@ -36,6 +36,7 @@ export const CAMPOS_OPERADOR = [
   "bumps",
   "estilo2",
   "link_audio2",
+  "link_pagina2",
   "bumps_enviados",
 ] as const;
 

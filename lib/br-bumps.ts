@@ -124,3 +124,30 @@ export async function marcarEnviadoBr(pedidoId: string, item: string): Promise<v
   lista.add(item);
   await prisma.pedido.update({ where: { id: pedidoId }, data: { bumps_enviados: [...lista].join(",") } });
 }
+
+export type ItemEnvio = "musica" | "pagina" | "estilo" | "video";
+
+/**
+ * Botões do painel. "tudo" (Enviar tudo) chama o fluxo "BR - Envio" (N8N_WEBHOOK_ENVIO_URL),
+ * que manda a música e todo item já criado (página, estilo, vídeo) — WhatsApp de cada um e
+ * um e-mail só. "Reenviar" de uma linha chama o fluxo daquele item com `forcar`. Nada é
+ * gerado de novo — o estilo só regera se o pedido não tem a página da 2ª música (pedido antigo).
+ */
+export async function reenviarBr(pedidoId: string, item: ItemEnvio | "tudo"): Promise<Record<string, string>> {
+  const p = await prisma.pedido.findUnique({
+    where: { id: pedidoId },
+    select: { link_audio: true, link_pagina: true, song_id2: true, video: { select: { producao: true, opcoes: true } } },
+  });
+  if (!p) return { pedido: "nao_encontrado" };
+  if (item === "tudo" || item === "musica") {
+    return { tudo: p.link_audio || p.link_pagina ? await chamar("N8N_WEBHOOK_ENVIO_URL", { payment_id: pedidoId, pedido_id: pedidoId }, "envio") : "nao_gerado" };
+  }
+  if (item === "pagina") {
+    return { pagina: p.link_pagina ? await chamar("BR_N8N_PAGINA_WEBHOOK_URL", { pedido_id: pedidoId, forcar: true }, "reenvio da página") : "nao_gerado" };
+  }
+  if (item === "estilo") {
+    return { estilo: p.song_id2 ? await chamar("BR_N8N_ESTILO_WEBHOOK_URL", { pedido_id: pedidoId, forcar: true }, "reenvio do estilo") : "nao_gerado" };
+  }
+  const videoPronto = !!p.video && ehVideoLetra(p.video.opcoes) && p.video.producao === "concluido";
+  return { video: videoPronto ? await chamar("BR_N8N_VIDEO_LETRA_WEBHOOK_URL", { pedido_id: pedidoId, reenviar: true }, "reenvio do vídeo") : "nao_gerado" };
+}

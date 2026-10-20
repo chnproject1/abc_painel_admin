@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     if (action === "estilo_ready") {
       await prisma.pedido.update({
         where: { id },
-        data: { song_id2: data.song_id2 || undefined, link_audio2: data.link_audio2 || undefined },
+        data: { song_id2: data.song_id2 || undefined, link_audio2: data.link_audio2 || undefined, link_pagina2: data.link_pagina2 || undefined },
       });
       return NextResponse.json({ success: true, message: "Estilo extra gerado" });
     }

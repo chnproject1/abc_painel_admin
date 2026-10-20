@@ -69,6 +69,7 @@ model Pedido {
   suno_task_id     String?   // vídeo com letra: letra com tempos pela API do Suno
   song_id2         String?   // estilo extra: a 2ª música
   link_audio2      String?
+  link_pagina2     String?   // estilo extra: página da 2ª música (o "Reenviar" manda esta, sem gerar de novo)
   bumps_enviados   String?   // itens já entregues: "pagina,estilo"
 
   // Upsell de vídeo (fotos + música). Um por pedido, criado quando o n8n
