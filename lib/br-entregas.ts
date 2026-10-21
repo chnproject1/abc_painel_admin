@@ -12,7 +12,8 @@ import { estadoVideo, ehVideoLetraBr, type VideoResumo } from "@/lib/video-estad
     cinza    ainda em produção, no prazo normal
 
   O envio de cada canal vem dos tokens de bumps_enviados (lib/br-bumps.ts):
-  "estilo.whats" = entregue, "video.email!" = erro.
+  "estilo.whats@2026-10-21T14:23:00.000Z" = entregue (e quando), "video.email!" = erro.
+  Token antigo sem a hora ("estilo.whats", ou só "estilo" = WhatsApp) vale como entregue.
 */
 
 export type EstadoCanal = "ok" | "erro" | null;
@@ -38,6 +39,7 @@ export type PedidoEntregaBr = {
 export type LinhaEntrega = {
   item: ItemEntrega; rotulo: string; gerado: boolean; cor: Cor; texto: string;
   whats: EstadoCanal; email: EstadoCanal; href?: string | null;
+  quando?: string | null;   // 1ª entrega que deu certo (página / estilo; música e vídeo têm coluna própria)
 };
 
 // a 2ª música sai depois da principal: o Suno leva alguns minutos
@@ -48,11 +50,32 @@ export function bumpsMapa(bumps?: string | null): Record<string, string> {
   return Object.fromEntries(String(bumps || "").split(",").filter(Boolean).map((b) => b.split(":") as [string, string]));
 }
 
+/** Tokens da bumps_enviados: { nome: "estilo.whats" | "estilo.whats!" | "estilo", quando? } */
+function tokens(bumpsEnviados: string | null | undefined) {
+  return String(bumpsEnviados || "").split(",").filter(Boolean).map((t) => {
+    const [nome, quando] = t.split("@");
+    return { nome, quando: quando || null };
+  });
+}
+
 /** Estado de um canal pelos tokens; `legado` = a coluna antiga já diz entregue. */
 export function estadoCanal(bumpsEnviados: string | null | undefined, item: string, canal: "whats" | "email", legado = false): EstadoCanal {
-  const t = String(bumpsEnviados || "").split(",");
+  const t = tokens(bumpsEnviados).map((x) => x.nome);
   if (t.includes(`${item}.${canal}!`)) return "erro";
   return t.includes(`${item}.${canal}`) || legado || (canal === "whats" && t.includes(item)) ? "ok" : null;
+}
+
+/** Já saiu por algum canal (pra não mandar de novo sozinho). */
+export function jaEnviadoBr(bumpsEnviados: string | null | undefined, item: string): boolean {
+  return tokens(bumpsEnviados).some((x) => x.nome === item || x.nome === `${item}.whats` || x.nome === `${item}.email`);
+}
+
+/** Quando o item foi entregue pela 1ª vez (o canal que saiu primeiro). */
+export function quandoEntregueBr(bumpsEnviados: string | null | undefined, item: string): string | null {
+  const horas = tokens(bumpsEnviados)
+    .filter((x) => x.quando && (x.nome === `${item}.whats` || x.nome === `${item}.email`))
+    .map((x) => x.quando as string).sort();
+  return horas[0] ?? null;
 }
 
 /** As linhas de Entregas do pedido, com a cor. `producao`: "erro" ou o texto do que está em andamento. */
@@ -70,12 +93,12 @@ export function linhasEntregaBr(p: PedidoEntregaBr, agora = Date.now()): LinhaEn
     { item: "musica", rotulo: "Música", mostra: true, gerado: musicaGerada, producao: semMusica,
       whats: canal("musica", "whats", !!p.entrega_whatsapp), email: canal("musica", "email", !!p.entrega_email) },
     { item: "pagina", rotulo: "Página Premium — bump", mostra: !!bumps.pagina, gerado: !!p.link_pagina, href: p.link_pagina,
-      producao: semMusica, whats: canal("pagina", "whats"), email: canal("pagina", "email") },
+      producao: semMusica, whats: canal("pagina", "whats"), email: canal("pagina", "email"), quando: quandoEntregueBr(p.bumps_enviados, "pagina") },
     { item: "estilo", rotulo: `Estilo extra${p.estilo2 ? ` (${p.estilo2})` : ""} — bump`, mostra: !!bumps.estilo,
       gerado: !!p.link_audio2, href: p.link_pagina2 || p.link_audio2,
       producao: !musicaGerada ? (pago ? "Aguardando a música principal" : "Aguardando o pagamento")
         : minDesdeMusica !== null && minDesdeMusica < PRAZO_ESTILO_MIN ? "Gerando a 2ª música" : "erro",
-      whats: canal("estilo", "whats"), email: canal("estilo", "email") },
+      whats: canal("estilo", "whats"), email: canal("estilo", "email"), quando: quandoEntregueBr(p.bumps_enviados, "estilo") },
     { item: "video", rotulo: ehVideoLetraBr(v?.opcoes) || bumps.video ? "Vídeo com letra — bump" : "Vídeo com fotos — upsell",
       mostra: !!bumps.video || v?.status === "pago", gerado: v?.producao === "concluido", href: v?.link,
       producao: !v ? (pago ? "erro" : "Aguardando o pagamento") : ev?.chave === "erro" ? "erro" : ev?.rotulo ?? null,

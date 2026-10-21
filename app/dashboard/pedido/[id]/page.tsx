@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { estadoVideo, PRODUCAO_LABEL, type VideoResumo } from "@/lib/video-estado";
-import { bumpsMapa, estadoCanal, linhasEntregaBr, type Cor, type EstadoCanal } from "@/lib/br-entregas";
+import { bumpsMapa, estadoCanal, linhasEntregaBr, type Cor, type LinhaEntrega } from "@/lib/br-entregas";
 
 interface Pedido {
   id: string;
@@ -27,6 +27,7 @@ interface Pedido {
   estilo2?: string | null;
   link_audio2?: string | null;
   link_pagina2?: string | null;
+  song_id2?: string | null;
   bumps_enviados?: string | null;
   valor?: string;
   data_pedido?: string;
@@ -233,10 +234,8 @@ export default function PedidoPage() {
   const v = pedido.video;
   const videoLetra = v?.opcoes?.modelo === "letra";
   const linhas = linhasEntregaBr(pedido);
-  const falhas = linhas.flatMap((l) => [
-    l.whats === "erro" ? `${l.rotulo.split(" — ")[0]} (WhatsApp)` : null,
-    l.email === "erro" ? `${l.rotulo.split(" — ")[0]} (e-mail)` : null,
-  ]).filter(Boolean);
+  const linha = (item: string) => linhas.find((l) => l.item === item);
+  const dt = (d?: string | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
   const real = (x?: string | number | null) => x != null && x !== "" ? `R$ ${Number(x).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : null;
 
   return (
@@ -271,121 +270,64 @@ export default function PedidoPage() {
             {pedido.status}
           </span>
         </div>
+        {isAdmin && pedido.status !== "cancelado" && (
+          <button
+            onClick={cancelarPedido}
+            disabled={cancelando}
+            className="text-xs border border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 hover:text-red-600 disabled:opacity-50 font-medium rounded-lg px-3 py-1.5 transition-colors shrink-0"
+          >
+            {cancelando ? "..." : "Contato inválido"}
+          </button>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
 
-        {/* Barra de status rápido */}
-        <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 flex flex-wrap gap-4 sm:gap-8">
-          <StatusIndicator
-            label="Música gerada"
-            ativo={musicaGerada}
-            corAtivo="text-green-600"
-            corInativo="text-red-500"
-          />
-          <StatusIndicator
-            label="WhatsApp"
-            ativo={pedido.entrega_whatsapp}
-            corAtivo="text-green-600"
-            corInativo="text-yellow-600"
-            labelAtivo="Entregue"
-            labelInativo="Não entregue"
-          />
-          <StatusIndicator
-            label="E-mail"
-            ativo={pedido.entrega_email}
-            corAtivo="text-green-600"
-            corInativo="text-yellow-600"
-            labelAtivo="Entregue"
-            labelInativo="Não entregue"
-          />
-          {isAdmin && pedido.status === "pago" && (
-            <StatusIndicator
-              label="Rastreio"
-              ativo={!!pedido.rastreado}
-              corAtivo="text-green-600"
-              corInativo="text-blue-600"
-              labelAtivo="Registrado"
-              labelInativo="Pendente"
-            />
-          )}
-          {pedido.data_pedido && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-gray-400">Data do pedido</span>
-              <span className="text-sm font-medium text-gray-700">
-                {new Date(pedido.data_pedido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-              </span>
-            </div>
-          )}
-          {isAdmin && pedido.status !== "cancelado" && (
-            <div className="ml-auto flex items-center">
-              <button
-                onClick={cancelarPedido}
-                disabled={cancelando}
-                className="text-xs border border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 hover:text-red-600 disabled:opacity-50 font-medium rounded-lg px-3 py-1.5 transition-colors"
-              >
-                {cancelando ? "..." : "Contato inválido"}
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Atendimento: a barra de status de sempre. O admin vê o Funil e as Entregas (como no ES). */}
+        {!isAdmin && (
+          <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 flex flex-wrap gap-4 sm:gap-8">
+            <StatusIndicator label="Música gerada" ativo={musicaGerada} corAtivo="text-green-600" corInativo="text-red-500" />
+            <StatusIndicator label="WhatsApp" ativo={pedido.entrega_whatsapp} corAtivo="text-green-600" corInativo="text-yellow-600" labelAtivo="Entregue" labelInativo="Não entregue" />
+            <StatusIndicator label="E-mail" ativo={pedido.entrega_email} corAtivo="text-green-600" corInativo="text-yellow-600" labelAtivo="Entregue" labelInativo="Não entregue" />
+            {pedido.data_pedido && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-gray-400">Data do pedido</span>
+                <span className="text-sm font-medium text-gray-700">{dt(pedido.data_pedido)}</span>
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Compras — o que a pessoa pagou: a venda do front (com os bumps no mesmo Pix) e o upsell de vídeo */}
-        {isAdmin && (pedido.bumps || v) && (
+        {/* Funil de ofertas — a venda da frente (os bumps vêm no mesmo Pix) e o upsell de vídeo */}
+        {isAdmin && (
           <section className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Compras</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <CompraBox titulo="Venda inicial" descricao={`Música · ${pedido.plano}`} pago={pedido.status === "pago"} valor={isAdmin ? real(pedido.valor) : null} />
-              {bumps.video && <CompraBox titulo="Bump" descricao="Vídeo com letra" pago={pedido.status === "pago"} valor={real(bumps.video)} />}
-              {bumps.estilo && <CompraBox titulo="Bump" descricao={`Estilo extra${pedido.estilo2 ? ` · ${pedido.estilo2}` : ""}`} pago={pedido.status === "pago"} valor={real(bumps.estilo)} />}
-              {bumps.pagina && <CompraBox titulo="Bump" descricao="Página Premium" pago={pedido.status === "pago"} valor={real(bumps.pagina)} />}
-              {v && !bumps.video && <CompraBox titulo="Upsell" descricao="Vídeo com fotos" pago={v.status === "pago"} valor={real(v.valor)} />}
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Funil de ofertas</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              <OfertaBox titulo="Venda inicial" descricao={`Música · ${pedido.plano}`} status={pedido.status} valor={real(pedido.valor)} rastreado={!!pedido.rastreado} />
+              <OfertaBox titulo="Bump" descricao="Vídeo com letra" status={bumps.video ? pedido.status : null} valor={real(bumps.video)} />
+              <OfertaBox titulo="Bump" descricao={`Estilo extra${pedido.estilo2 ? ` · ${pedido.estilo2}` : ""}`} status={bumps.estilo ? pedido.status : null} valor={real(bumps.estilo)} />
+              <OfertaBox titulo="Bump" descricao="Página Premium" status={bumps.pagina ? pedido.status : null} valor={real(bumps.pagina)} />
+              <OfertaBox titulo="Upsell" descricao="Vídeo com fotos" status={v && !videoLetra ? v.status : null} valor={v && !videoLetra ? real(v.valor) : null} rastreado={v && !videoLetra ? !!v.rastreado : undefined} />
             </div>
           </section>
         )}
 
-        {/* Entregas — WhatsApp e e-mail de cada item. Atendimento vê só o botão Enviar (como antes). */}
-        <section className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{isAdmin ? "Entregas" : "Enviar ao cliente"}</h2>
-            <div className="flex flex-wrap gap-2">
-              {/* Envio geral (só com order bump): um e-mail só com a música e os itens já criados ("BR - Envio Geral").
-                  Enviar: o envio da música de sempre (WhatsApp + e-mail). */}
-              {isAdmin && pedido.bumps && <button
-                onClick={() => acionarEnvio("geral")}
-                disabled={!!enviando}
-                className="shrink-0 border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
-              >
-                {enviando === "geral" ? "Enviando..." : "Envio geral"}
-              </button>}
-              <button
-                onClick={() => acionarEnvio("tudo")}
-                disabled={!!enviando}
-                className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
-              >
-                {enviando === "tudo" ? "Enviando..." : "Enviar"}
-              </button>
+        {/* Entregas — cor do estado pela regra de lib/br-entregas.ts (a mesma do início) */}
+        {isAdmin && (
+          <section className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Entregas</h2>
+            <div className="divide-y divide-gray-100">
+              <Entrega label="Música — venda inicial" linha={linha("musica")} quando={pedido.data_entrega} />
+              <Entrega label="Página Premium — bump" linha={linha("pagina")} />
+              <Entrega label="Estilo extra — bump" linha={linha("estilo")} />
+              <Entrega label="Vídeo com letra — bump" linha={videoLetra || bumps.video ? linha("video") : undefined} quando={v?.concluido_em} />
+              <Entrega label="Vídeo com fotos — upsell" linha={!videoLetra && !bumps.video ? linha("video") : undefined} quando={v?.concluido_em} />
             </div>
-          </div>
-          {isAdmin && falhas.length > 0 && (
-            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 my-2">
-              <strong>Falha de entrega:</strong> {falhas.join(" · ")}
-            </p>
-          )}
-          {isAdmin && <div>
-            {linhas.map((l) => (
-              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} cor={l.cor} texto={l.texto} whats={l.whats} email={l.email} href={l.href}
-                /* a música sai pelo "Enviar" / "Envio geral" */
-                onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
-                enviando={enviando === l.item} />
-            ))}
-          </div>}
-        </section>
+          </section>
+        )}
 
-        {/* Grid: Cliente + Pedido */}
+        {/* Cliente + Pedido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-          {/* Cliente */}
           <section className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Cliente</h2>
@@ -411,53 +353,47 @@ export default function PedidoPage() {
             )}
           </section>
 
-          {/* Pedido */}
           <section className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Pedido</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Plano" valor={pedido.plano} capitalize />
-                <Campo label="Estilo" valor={pedido.estilo} />
+                <Campo label="Estilo" valor={pedido.estilo2 ? `${pedido.estilo ?? "—"} · extra: ${pedido.estilo2}` : pedido.estilo} />
               </div>
-              {isAdmin && (
+              <div className="grid grid-cols-2 gap-3">
+                {isAdmin && <Campo label="Valor" valor={real(pedido.valor)} />}
+                <Campo label="Entrega principal" valor={dt(pedido.data_entrega)} />
+              </div>
+              {(linha("pagina")?.quando || linha("estilo")?.quando) && (
                 <div className="grid grid-cols-2 gap-3">
-                  {pedido.valor && (
-                    <Campo label="Valor" valor={`R$ ${Number(pedido.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
-                  )}
-                  {pedido.data_entrega && (
-                    <Campo label="Data entrega" valor={new Date(pedido.data_entrega).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} />
-                  )}
+                  <Campo label="Entrega da Página Premium" valor={dt(linha("pagina")?.quando)} />
+                  <Campo label="Entrega do estilo extra" valor={dt(linha("estilo")?.quando)} />
                 </div>
               )}
-              <Campo label="Song ID" valor={pedido.song_id} mono />
+              <Campo label="Data do pedido" valor={dt(pedido.data_pedido)} />
+              <Campo label="ID do pedido" valor={pedido.id} mono />
             </div>
           </section>
         </div>
 
-        {/* Links */}
-        {(pedido.link_pagina || pedido.link_basica || pedido.link_audio || pedido.link_mp4) && (
-          <section className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Links</h2>
-            <div className="flex flex-wrap gap-2">
-              {pedido.link_pagina && (
-                <LinkBtn href={pedido.link_pagina} label="🔗 Página Premium" />
-              )}
-              {pedido.link_basica && (
-                <LinkBtn href={pedido.link_basica} label="🔗 Página Básica" />
-              )}
-              {pedido.link_audio && (
-                <a
-                  href={`/api/download?url=${encodeURIComponent(pedido.link_audio)}&filename=${encodeURIComponent(`${pedido.nome || "audio"}.mp3`)}`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium"
-                >
-                  🎵 Áudio
-                </a>
-              )}
-              {pedido.link_mp4 && (
-                <LinkBtn href={pedido.link_mp4} label="🎬 MP4" />
-              )}
-            </div>
-          </section>
+        {/* Músicas — um bloco por música */}
+        <Musica
+          titulo="Música 1 — venda inicial"
+          nomeArquivo={pedido.nome}
+          songId={pedido.song_id}
+          linkPagina={pedido.link_pagina}
+          linkBasica={pedido.link_basica}
+          linkAudio={pedido.link_audio}
+          linkMp4={pedido.link_mp4}
+        />
+        {bumps.estilo && (
+          <Musica
+            titulo={`Música 2 — estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""}`}
+            nomeArquivo={`${pedido.nome} ${pedido.estilo2 ?? ""}`.trim()}
+            songId={pedido.song_id2 ?? undefined}
+            linkPagina={pedido.link_pagina2 ?? undefined}
+            linkAudio={pedido.link_audio2 ?? undefined}
+          />
         )}
 
         {/* Letra e Estilo */}
@@ -493,22 +429,33 @@ export default function PedidoPage() {
           </button>
         </section>
 
-        {/* Ações */}
+        {/* Ações — todos os botões aqui, no formato do ES */}
         <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-          {/* Gerar música */}
-          <div className="p-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Gerar música</p>
-              <p className="text-xs text-gray-400 mt-0.5">Reenvia para produção e atualiza a música do cliente.</p>
-            </div>
-            <button
-              onClick={acionarN8n}
-              disabled={acionando}
-              className="shrink-0 bg-avocado-600 hover:bg-avocado-700 disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors"
-            >
-              {acionando ? "Gerando..." : "Gerar e enviar"}
-            </button>
-          </div>
+          <Acao
+            titulo="Enviar música"
+            descricao="Envia a música por WhatsApp e e-mail (o envio de sempre)."
+            rotulo={enviando === "tudo" ? "Enviando..." : "Enviar"}
+            cor="bg-blue-600 hover:bg-blue-700"
+            disabled={!!enviando || acionando}
+            onClick={() => acionarEnvio("tudo")}
+          />
+          {isAdmin && pedido.bumps && (
+            <Acao
+              titulo="Envio geral"
+              descricao="Um e-mail só com a música e tudo o que já foi gerado do pedido (página, estilo extra, vídeo)."
+              rotulo={enviando === "geral" ? "Enviando..." : "Enviar"}
+              cor="bg-blue-600 hover:bg-blue-700"
+              disabled={!!enviando || acionando}
+              onClick={() => acionarEnvio("geral")}
+            />
+          )}
+          <Acao
+            titulo="Gerar música principal"
+            descricao="Reenvia para produção e atualiza a música do cliente."
+            rotulo={acionando ? "Gerando..." : "Gerar e enviar"}
+            disabled={!!enviando || acionando}
+            onClick={acionarN8n}
+          />
         </section>
 
         {/* Bump do vídeo pago e o vídeo não foi criado (o Pix caiu e a criação falhou) — só admin */}
@@ -606,58 +553,123 @@ export default function PedidoPage() {
 
 /* ── Sub-componentes ── */
 
-function CompraBox({ titulo, descricao, pago, valor }: { titulo: string; descricao: string; pago: boolean; valor?: string | null }) {
+function OfertaBox({
+  titulo, descricao, status, valor, rastreado,
+}: {
+  titulo: string; descricao: string; status?: string | null; valor?: string | null;
+  /** undefined = não mostra (o bump vai na venda da frente) */
+  rastreado?: boolean;
+}) {
+  const cor =
+    status === "pago"       ? "border-avocado-300 bg-avocado-50"
+    : status === "recusado" ? "border-gray-200 bg-gray-50 opacity-60"
+    : status                ? "border-yellow-200 bg-yellow-50"
+    : "border-dashed border-gray-200 bg-white opacity-50";
+
   return (
-    <div className={`rounded-lg border px-3 py-2.5 ${pago ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
-      <p className="text-xs text-gray-400">{titulo}</p>
-      <p className="text-sm font-medium text-gray-800">{descricao}</p>
-      <p className={`text-xs font-semibold mt-1 ${pago ? "text-green-700" : "text-gray-500"}`}>
-        {pago ? "✓ Pago" : "Não pagou"}{valor ? ` · ${valor}` : ""}
-      </p>
+    <div className={`rounded-lg border p-3 ${cor}`}>
+      <p className="text-xs font-semibold text-gray-700">{titulo}</p>
+      <p className="text-[11px] text-gray-500 mb-1.5">{descricao}</p>
+      <p className="text-sm font-medium text-gray-800">{status ?? "não optado"}</p>
+      {valor && <p className="text-xs text-gray-500 tabular-nums mt-0.5">{valor}</p>}
+      {status === "pago" && rastreado !== undefined && (
+        <p className={`text-[11px] font-medium mt-1.5 ${rastreado ? "text-avocado-600" : "text-blue-700"}`}>
+          {rastreado ? "✓ UTMify" : "Sem rastreio"}
+        </p>
+      )}
     </div>
   );
 }
 
-type Estado = EstadoCanal;
+/* Uma linha de Entregas, no desenho do ES; a cor vem de lib/br-entregas.ts:
+     verde entregue · amarelo erro no envio / não enviado · vermelho pago e nada gerado · cinza em produção */
+const COR_TEXTO: Record<Cor, string> = { verde: "text-green-600", amarelo: "text-yellow-600", vermelho: "text-red-600", cinza: "text-gray-500" };
 
-function Selo({ canal, estado }: { canal: string; estado: Estado }) {
-  const [cor, marca] = estado === "ok" ? ["bg-green-100 text-green-700", "✓"]
-    : estado === "erro" ? ["bg-red-100 text-red-700", "✕"] : ["bg-gray-100 text-gray-400", "—"];
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cor}`}>{marca} {canal}</span>;
+function Entrega({ label, linha, quando }: { label: string; linha?: LinhaEntrega; quando?: string | Date | null }) {
+  if (!linha) {
+    return (
+      <div className="flex items-center justify-between gap-3 py-2.5">
+        <span className="text-sm text-gray-300">{label}</span>
+        <span className="text-xs text-gray-300 shrink-0">não comprado</span>
+      </div>
+    );
+  }
+  // amarelo por erro: diz em qual canal
+  const canais = [linha.whats === "erro" ? "WhatsApp" : null, linha.email === "erro" ? "e-mail" : null].filter(Boolean);
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-sm text-gray-700">{label}</span>
+      <span className={`text-sm font-medium shrink-0 text-right ${COR_TEXTO[linha.cor]}`}>
+        {linha.texto}{canais.length ? ` (${canais.join(" e ")})` : ""}
+        {linha.cor === "verde" && (quando ?? linha.quando) && (
+          <span className="text-xs font-normal text-gray-400 ml-2">
+            {new Date((quando ?? linha.quando)!).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+          </span>
+        )}
+      </span>
+    </div>
+  );
 }
 
-/* Uma linha de Entregas, com a cor do estado (regra em lib/br-entregas.ts, a mesma do início):
-     verde entregue · amarelo erro no envio / não enviado · vermelho pago e nada gerado · cinza em produção */
-const COR_LINHA: Record<Cor, [string, string]> = {
-  verde: ["bg-green-50", "text-green-700"], amarelo: ["bg-yellow-50", "text-yellow-700"],
-  vermelho: ["bg-red-50", "text-red-600"], cinza: ["bg-gray-50", "text-gray-500"],
-};
-
-function Entrega({ label, gerado, cor: c, texto, whats, email, onReenviar, enviando, href }: {
-  label: string; gerado: boolean; cor: Cor; texto: string; whats: EstadoCanal; email: EstadoCanal;
-  onReenviar?: () => void; enviando?: boolean; href?: string | null;
+function Acao({
+  titulo, descricao, rotulo, disabled, onClick, cor = "bg-avocado-600 hover:bg-avocado-700",
+}: {
+  titulo: string; descricao: string; rotulo: string; disabled: boolean;
+  onClick: () => void; cor?: string;
 }) {
-  const [fundo, cor] = COR_LINHA[c];
   return (
-    <div className={`py-3 px-3 my-1 rounded-lg flex flex-wrap items-center gap-2 sm:gap-3 ${fundo}`}>
-      <p className="text-sm font-medium text-gray-700 flex-1 min-w-[10rem]">{label}</p>
-      <span className={`text-sm font-semibold ${cor}`}>{texto}</span>
-      {gerado && (
-        <>
-          <Selo canal="WhatsApp" estado={whats} />
-          <Selo canal="E-mail" estado={email} />
-        </>
-      )}
-      {href && gerado && (
-        <a href={href} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">abrir</a>
-      )}
-      {onReenviar && gerado && (
-        <button onClick={onReenviar} disabled={enviando}
-          className="text-xs border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 text-gray-600 disabled:opacity-50 font-medium rounded-md px-2.5 py-1 transition-colors">
-          {enviando ? "..." : "Reenviar"}
-        </button>
-      )}
+    <div className="p-5 flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-gray-700">{titulo}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{descricao}</p>
+      </div>
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`shrink-0 ${cor} disabled:opacity-50 text-white font-medium rounded-lg px-5 py-2 text-sm transition-colors`}
+      >
+        {rotulo}
+      </button>
     </div>
+  );
+}
+
+function Musica({
+  titulo, nomeArquivo, songId, linkPagina, linkBasica, linkAudio, linkMp4,
+}: {
+  titulo: string; nomeArquivo: string; songId?: string;
+  linkPagina?: string; linkBasica?: string; linkAudio?: string; linkMp4?: string;
+}) {
+  const temAlgo = songId || linkPagina || linkBasica || linkAudio || linkMp4;
+  if (!temAlgo) {
+    return (
+      <section className="bg-white rounded-xl border border-dashed border-gray-200 p-5">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{titulo}</h2>
+        <p className="text-sm text-gray-400 mt-2">Ainda não gerada.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{titulo}</h2>
+        {songId && <span className="text-[11px] font-mono text-gray-400 truncate">{songId}</span>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {linkPagina && <LinkBtn href={linkPagina} label="🔗 Página Premium" />}
+        {linkBasica && <LinkBtn href={linkBasica} label="🔗 Página Básica" />}
+        {linkAudio && (
+          <a
+            href={`/api/download?url=${encodeURIComponent(linkAudio)}&filename=${encodeURIComponent(`${nomeArquivo || "audio"}.mp3`)}`}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium"
+          >
+            🎵 Áudio
+          </a>
+        )}
+        {linkMp4 && <LinkBtn href={linkMp4} label="🎬 MP4" />}
+      </div>
+    </section>
   );
 }
 

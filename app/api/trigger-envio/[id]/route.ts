@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { reenviarBr, type ItemEnvio } from "@/lib/br-bumps";
 
-/* POST { item?: "musica" | "pagina" | "estilo" | "video" | "tudo" } — padrão "tudo".
-   Reenvia o que já foi gerado (lib/br-bumps.ts, reenviarBr). */
+/* POST { item?: "tudo" | "geral" | "fotos" | "criar_video" } — padrão "tudo".
+   Botões do pedido BR (lib/br-bumps.ts, reenviarBr). */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const item = (body?.item ?? "tudo") as ItemEnvio | "tudo";
-  if (!["musica", "pagina", "estilo", "video", "tudo", "geral", "fotos", "criar_video"].includes(item)) {
+  if (!["musica", "tudo", "geral", "fotos", "criar_video"].includes(item)) {
     return NextResponse.json({ error: `item inválido: ${item}` }, { status: 400 });
   }
 

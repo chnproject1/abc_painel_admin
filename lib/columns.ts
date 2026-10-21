@@ -37,6 +37,7 @@ export const CAMPOS_OPERADOR = [
   "estilo2",
   "link_audio2",
   "link_pagina2",
+  "song_id2",
   "bumps_enviados",
 ] as const;
 
