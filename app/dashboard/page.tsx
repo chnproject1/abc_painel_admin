@@ -59,7 +59,7 @@ const FILTRO_LABEL: Record<string, string> = {
 };
 // Order bumps: bump_<item>_<corte>
 for (const [item, rotulo] of [["pagina", "Página Premium"], ["estilo", "Estilo extra"], ["video", "Vídeo com letra"]]) {
-  for (const [corte, nome] of [["todos", "compraram"], ["entregue", "entregues"], ["pendente", "pendentes envio"], ["erro", "erro de geração"]]) {
+  for (const [corte, nome] of [["todos", "compraram"], ["entregue", "entregues"], ["pendente", "pendentes envio"], ["erro", "erro de geração"], ["rastreio", "sem rastreio (vai na venda da frente)"]]) {
     FILTRO_LABEL[`bump_${item}_${corte}`] = `${rotulo}: ${nome}`;
   }
 }
@@ -76,13 +76,12 @@ function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`rounded-xl border p-4 sm:p-5 flex flex-col gap-1 text-left w-full transition-all hover:opacity-90 ${cor} ${
-        ativo ? "ring-2 ring-offset-2 ring-current shadow-md" : "hover:shadow-sm"
+      className={`rounded-lg border px-3 py-2 flex flex-col text-left w-full transition-all hover:opacity-90 ${cor} ${
+        ativo ? "ring-2 ring-offset-1 ring-current shadow-md" : "hover:shadow-sm"
       }`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide opacity-70 leading-tight">{label}</p>
-      <p className="text-3xl sm:text-4xl font-bold tabular-nums">{value.toLocaleString("pt-BR")}</p>
-      <p className="text-xs opacity-50 mt-1">ver lista →</p>
+      <p className="text-[10px] font-medium uppercase tracking-wide opacity-70 leading-tight truncate">{label}</p>
+      <p className="text-lg font-bold tabular-nums leading-snug">{value.toLocaleString("pt-BR")}</p>
     </button>
   );
 }
@@ -307,49 +306,43 @@ function DashboardContent() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-        {/* Stats clicáveis — apenas admin */}
-        {isAdmin && stats && (
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Visão geral</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-              <StatCard label="Total"           value={stats.total}           cor="bg-white border-gray-200 text-gray-800"          ativo={filtroAtivo === "todos"}     onClick={() => handleCardClick("todos")} />
-              <StatCard label="Pagas"           value={stats.pagos}           cor="bg-green-50 border-green-200 text-green-800"      ativo={filtroAtivo === "pagos"}     onClick={() => handleCardClick("pagos")} />
-              <StatCard label="Pendentes envio" value={stats.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800"   ativo={filtroAtivo === "pendentes"} onClick={() => handleCardClick("pendentes")} />
-              <StatCard label="Erro de geração" value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"            ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
-              <StatCard label="Sem rastreio"    value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"      ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
+        {/* Stats clicáveis — apenas admin. Uma linha por produto, colunas alinhadas:
+            os order bumps não têm rastreio próprio (vão na venda da frente): o "Sem rastreio" deles é sempre 0. */}
+        {isAdmin && stats && (() => {
+          const VERDE = "bg-green-50 border-green-200 text-green-800", AMARELO = "bg-yellow-50 border-yellow-200 text-yellow-800",
+                VERMELHO = "bg-red-50 border-red-200 text-red-800", AZUL = "bg-blue-50 border-blue-200 text-blue-800",
+                BRANCO = "bg-white border-gray-200 text-gray-800";
+          type Cel = [string, number, string, string] | null;   // rótulo, número, filtro, cor
+          const linhas: [string, Cel[]][] = [
+            ["Música", [["Total", stats.total, "todos", BRANCO], ["Pagas", stats.pagos, "pagos", VERDE],
+              ["Pendentes envio", stats.pendentes_envio, "pendentes", AMARELO], ["Erro de geração", stats.erro_geracao, "erro", VERMELHO],
+              ["Sem rastreio", stats.pendentes_rastreio, "rastreio", AZUL]]],
+            ...BUMPS_INICIO.filter(([item]) => stats.bumps?.[item]).map(([item, rotulo]): [string, Cel[]] => {
+              const b = stats.bumps![item];
+              return [rotulo, [["Compraram", b.todos, `bump_${item}_todos`, BRANCO], ["Entregues", b.entregue, `bump_${item}_entregue`, VERDE],
+                ["Pendentes envio", b.pendente, `bump_${item}_pendente`, AMARELO], ["Erro de geração", b.erro, `bump_${item}_erro`, VERMELHO],
+                // sempre 0: o rastreio do bump vai junto da venda da frente — fica só pelo alinhamento
+                ["Sem rastreio", 0, `bump_${item}_rastreio`, AZUL]]];
+            }),
+            ...(stats.video ? [["Vídeo com fotos (upsell)", [["Links enviados", stats.video.total, "video_todos", BRANCO], ["Pagas", stats.video.pagos, "video_pagos", VERDE],
+              ["Pendentes envio", stats.video.pendentes_envio, "video_pendentes", AMARELO], ["Erro de geração", stats.video.erro_geracao, "video_erro", VERMELHO],
+              ["Sem rastreio", stats.video.sem_rastreio, "video_rastreio", AZUL]]] as [string, Cel[]]] : []),
+          ];
+          return (
+            <div className="mb-6 overflow-x-auto">
+              <div className="min-w-[640px] space-y-2">
+                {linhas.map(([rotulo, cels]) => (
+                  <div key={rotulo} className="grid grid-cols-[8.5rem_repeat(5,minmax(0,1fr))] gap-2 items-center">
+                    <p className="text-xs font-semibold text-gray-500 leading-tight">{rotulo}</p>
+                    {cels.map((c, k) => c
+                      ? <StatCard key={k} label={c[0]} value={c[1]} cor={c[3]} ativo={filtroAtivo === c[2]} onClick={() => handleCardClick(c[2])} />
+                      : <div key={k} />)}
+                  </div>
+                ))}
+              </div>
             </div>
-            {stats.bumps && (<>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Order bumps</h2>
-              <div className="space-y-4">
-                {BUMPS_INICIO.map(([item, rotulo]) => {
-                  const b = stats.bumps![item]; if (!b) return null;
-                  const f = (c: string) => `bump_${item}_${c}`;
-                  return (
-                    <div key={item}>
-                      <p className="text-xs font-semibold text-gray-400 mb-2">{rotulo}</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                        <StatCard label="Compraram"       value={b.todos}    cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === f("todos")}    onClick={() => handleCardClick(f("todos"))} />
-                        <StatCard label="Entregues"       value={b.entregue} cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === f("entregue")} onClick={() => handleCardClick(f("entregue"))} />
-                        <StatCard label="Pendentes envio" value={b.pendente} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === f("pendente")} onClick={() => handleCardClick(f("pendente"))} />
-                        <StatCard label="Erro de geração" value={b.erro}     cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === f("erro")}     onClick={() => handleCardClick(f("erro"))} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>)}
-            {stats.video && (<>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Vídeo com fotos (upsell)</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-                <StatCard label="Links enviados"  value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video_todos"}     onClick={() => handleCardClick("video_todos")} />
-                <StatCard label="Pagas"           value={stats.video.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "video_pagos"}     onClick={() => handleCardClick("video_pagos")} />
-                <StatCard label="Pendentes envio" value={stats.video.pendentes_envio} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === "video_pendentes"} onClick={() => handleCardClick("video_pendentes")} />
-                <StatCard label="Erro de geração" value={stats.video.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === "video_erro"}      onClick={() => handleCardClick("video_erro")} />
-                <StatCard label="Sem rastreio"    value={stats.video.sem_rastreio}    cor="bg-blue-50 border-blue-200 text-blue-800"       ativo={filtroAtivo === "video_rastreio"}  onClick={() => handleCardClick("video_rastreio")} />
-              </div>
-            </>)}
-          </div>
-        )}
+          );
+        })()}
 
         {/* Busca */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
