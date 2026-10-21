@@ -236,16 +236,26 @@ export default function PedidoPage() {
       : tokens.includes(`${item}.${canal}`) || legado || (canal === "whats" && tokens.includes(item)) ? "ok" : null;
   const v = pedido.video;
   const videoLetra = v?.opcoes?.modelo === "letra";
-  const linhas = [
-    { item: "musica", rotulo: "Música", mostra: true, gerado: musicaGerada,
+  /* Produção de cada item enquanto não foi gerado (o envio é lido pelos selos):
+       "erro" = pago e nada gerado (vermelho) · texto = ainda no prazo normal (cinza) */
+  const pago = pedido.status === "pago";
+  const semMusica: Producao = pago ? "erro" : "Aguardando o pagamento";
+  const minDesdeMusica = pedido.data_entrega ? (Date.now() - new Date(pedido.data_entrega).getTime()) / 60000 : null;
+  const ev = v ? estadoVideo(v) : null;
+  const linhas: Linha[] = [
+    { item: "musica", rotulo: "Música", mostra: true, gerado: musicaGerada, producao: semMusica,
       whats: estado("musica", "whats", pedido.entrega_whatsapp), email: estado("musica", "email", pedido.entrega_email) },
     { item: "pagina", rotulo: "Página Premium — bump", mostra: !!bumps.pagina, gerado: !!pedido.link_pagina, href: pedido.link_pagina,
-      whats: estado("pagina", "whats"), email: estado("pagina", "email") },
+      producao: semMusica, whats: estado("pagina", "whats"), email: estado("pagina", "email") },
+    // a 2ª música sai depois da principal: o Suno leva alguns minutos
     { item: "estilo", rotulo: `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`, mostra: !!bumps.estilo,
       gerado: !!pedido.link_audio2, href: pedido.link_pagina2 || pedido.link_audio2,
+      producao: !musicaGerada ? (pago ? "Aguardando a música principal" : "Aguardando o pagamento")
+        : minDesdeMusica !== null && minDesdeMusica < 30 ? "Gerando a 2ª música" : "erro",
       whats: estado("estilo", "whats"), email: estado("estilo", "email") },
     { item: "video", rotulo: videoLetra || bumps.video ? "Vídeo com letra — bump" : "Vídeo com fotos — upsell", mostra: !!bumps.video || v?.status === "pago",
       gerado: v?.producao === "concluido", href: v?.link,
+      producao: !v ? (pago ? "erro" : "Aguardando o pagamento") : ev?.chave === "erro" ? "erro" : ev?.rotulo ?? null,
       whats: estado("video", "whats", !!v?.entrega_whatsapp), email: estado("video", "email") },
   ].filter((l) => l.mostra);
   const falhas = linhas.flatMap((l) => [
@@ -371,7 +381,7 @@ export default function PedidoPage() {
                 disabled={!!enviando}
                 className="shrink-0 border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
               >
-                {enviando === "geral" ? "Enviando..." : "✉️ Envio geral"}
+                {enviando === "geral" ? "Enviando..." : "Envio geral"}
               </button>}
               <button
                 onClick={() => acionarEnvio("tudo")}
@@ -387,9 +397,9 @@ export default function PedidoPage() {
               <strong>Falha de entrega:</strong> {falhas.join(" · ")}
             </p>
           )}
-          {isAdmin && <div className="divide-y divide-gray-100">
+          {isAdmin && <div>
             {linhas.map((l) => (
-              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} whats={l.whats} email={l.email} href={l.href}
+              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} producao={l.producao} whats={l.whats} email={l.email} href={l.href}
                 /* a música sai pelo "Enviar" / "Envio geral" */
                 onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
                 enviando={enviando === l.item} />
@@ -641,28 +651,40 @@ function Selo({ canal, estado }: { canal: string; estado: Estado }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cor}`}>{marca} {canal}</span>;
 }
 
-function Entrega({ label, gerado, whats, email, onReenviar, enviando, href }: {
-  label: string; gerado: boolean; whats: Estado; email: Estado;
+type Producao = "erro" | string | null;   // "erro" = pago e nada gerado · texto = em andamento
+type Linha = { item: string; rotulo: string; mostra: boolean; gerado: boolean; producao: Producao; href?: string | null; whats: Estado; email: Estado };
+
+/* Uma linha de Entregas, com a cor do estado (mesmo padrão do ES):
+     verde    gerado e enviado, sem erro
+     amarelo  gerado, mas o envio deu erro em algum canal ou não saiu
+     vermelho pago e nada gerado (erro de produção)
+     cinza    ainda em produção, no prazo normal */
+function Entrega({ label, gerado, producao, whats, email, onReenviar, enviando, href }: {
+  label: string; gerado: boolean; producao: Producao; whats: Estado; email: Estado;
   onReenviar?: () => void; enviando?: boolean; href?: string | null;
 }) {
-  const erro = whats === "erro" || email === "erro";
+  const [fundo, cor, texto] = !gerado
+    ? producao === "erro" ? ["bg-red-50", "text-red-600", "✕ Pago — nada gerado"]
+      : ["bg-gray-50", "text-gray-500", `⏳ ${producao ?? "Em produção"}`]
+    : whats === "erro" || email === "erro" ? ["bg-yellow-50", "text-yellow-700", "● Gerado — erro no envio"]
+    : whats === "ok" || email === "ok" ? ["bg-green-50", "text-green-700", "✓ Entregue"]
+    : ["bg-yellow-50", "text-yellow-700", "● Gerado — não enviado"];
   return (
-    <div className={`py-3 flex flex-wrap items-center gap-2 sm:gap-3 ${erro ? "bg-red-50 -mx-2 px-2 rounded-lg" : ""}`}>
+    <div className={`py-3 px-3 my-1 rounded-lg flex flex-wrap items-center gap-2 sm:gap-3 ${fundo}`}>
       <p className="text-sm font-medium text-gray-700 flex-1 min-w-[10rem]">{label}</p>
-      {gerado ? (
+      <span className={`text-sm font-semibold ${cor}`}>{texto}</span>
+      {gerado && (
         <>
           <Selo canal="WhatsApp" estado={whats} />
           <Selo canal="E-mail" estado={email} />
         </>
-      ) : (
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Ainda não gerado</span>
       )}
       {href && gerado && (
         <a href={href} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">abrir</a>
       )}
       {onReenviar && gerado && (
         <button onClick={onReenviar} disabled={enviando}
-          className="text-xs border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600 disabled:opacity-50 font-medium rounded-md px-2.5 py-1 transition-colors">
+          className="text-xs border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 text-gray-600 disabled:opacity-50 font-medium rounded-md px-2.5 py-1 transition-colors">
           {enviando ? "..." : "Reenviar"}
         </button>
       )}
