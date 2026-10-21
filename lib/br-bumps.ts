@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkVideo, sufixoLink } from "@/lib/video";
+import { ESPERA_FOTOS_BR_MIN, ehVideoLetraBr } from "@/lib/video-estado";
 
 /*
   ORDER BUMPS DO BR (QUIZ BR V2) — pagos no MESMO Pix da música.
@@ -20,7 +21,7 @@ import { gerarToken, linkVideo, sufixoLink } from "@/lib/video";
   Cada etapa chama um webhook do n8n (variáveis BR_N8N_*). Sem a variável, só loga.
 */
 
-export const ESPERA_FOTOS_BR_MIN = 120;
+export { ESPERA_FOTOS_BR_MIN };
 export type ItemBump = "video" | "estilo" | "pagina";
 
 /** "video:29.90,estilo:24.90" → { video: 29.9, estilo: 24.9 } */
@@ -33,10 +34,8 @@ export function bumpsDe(texto: string | null | undefined): Partial<Record<ItemBu
   return out;
 }
 
-/** Vídeo do bump: PedidoVideo marcado com opcoes.modelo = "letra". */
-export function ehVideoLetra(opcoes: unknown): boolean {
-  return !!opcoes && typeof opcoes === "object" && (opcoes as any).modelo === "letra";
-}
+/** Vídeo do bump: PedidoVideo marcado com opcoes.modelo = "letra" (o upsell é o vídeo só de fotos). */
+export const ehVideoLetra = ehVideoLetraBr;
 
 async function chamar(variavel: string, corpo: Record<string, unknown>, rotulo: string): Promise<string> {
   const url = process.env[variavel];
@@ -54,27 +53,41 @@ async function chamar(variavel: string, corpo: Record<string, unknown>, rotulo: 
   }
 }
 
-/** Pix pago: cria o vídeo (se tem o bump) e pede as fotos na hora. Nunca lança. */
-export async function aoPagarBr(pedidoId: string): Promise<void> {
+/**
+ * Pix pago: cria o vídeo (se tem o bump) e pede as fotos na hora. Nunca lança.
+ * Também roda na música pronta, na rotina /api/bumps/reprocessar e no botão "Criar vídeo"
+ * do painel: se o Pix caiu e o vídeo não foi criado, ele é criado aqui.
+ */
+export async function aoPagarBr(pedidoId: string): Promise<string> {
   try {
-    const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { bumps: true, nome: true, telefone: true, email: true, video: true } });
+    const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { status: true, bumps: true, video: { select: { token: true } } } });
     const b = bumpsDe(p?.bumps);
-    if (!p || b.video === undefined || p.video) return;
-    const token = gerarToken();
+    if (!p || b.video === undefined) return "sem_bump";
+    if (p.video) return "ja_existe";
+    if (p.status !== "pago") return "nao_pago";
     await prisma.pedidoVideo.create({
       data: {
-        pedido_id: pedidoId, token, status: "pago", pago_em: new Date(), producao: "aguardando_fotos",
+        pedido_id: pedidoId, token: gerarToken(), status: "pago", pago_em: new Date(), producao: "aguardando_fotos",
         valor: b.video, opcoes: { modelo: "letra" }, enviado_em: new Date(),
       },
     });
-    const link = linkVideo(token);
-    await chamar("BR_N8N_FOTOS_WEBHOOK_URL", {
-      pedido_id: pedidoId, nome: p.nome, telefone: p.telefone, email: p.email,
-      link, sufixo: sufixoLink(link), max_fotos: 15, prazo_min: ESPERA_FOTOS_BR_MIN,
-    }, "pedido de fotos");
+    await pedirFotosBr(pedidoId);
+    return "criado";
   } catch (e: any) {
     console.error("[bumps-br] aoPagarBr:", pedidoId, e?.message);
+    return "falha";
   }
+}
+
+/** E-mail "Confirmação Vídeo" (o link pra subir as fotos). Também o "Reenviar pedido de fotos" do painel. */
+export async function pedirFotosBr(pedidoId: string): Promise<string> {
+  const p = await prisma.pedido.findUnique({ where: { id: pedidoId }, select: { nome: true, telefone: true, email: true, video: { select: { token: true } } } });
+  if (!p?.video) return "sem_video";
+  const link = linkVideo(p.video.token);
+  return chamar("BR_N8N_FOTOS_WEBHOOK_URL", {
+    pedido_id: pedidoId, nome: p.nome, telefone: p.telefone, email: p.email,
+    link, sufixo: sufixoLink(link), max_fotos: 15, prazo_min: ESPERA_FOTOS_BR_MIN,
+  }, "pedido de fotos");
 }
 
 /**
@@ -92,7 +105,7 @@ export async function dispararVideoBr(pedidoId: string, forcar = false): Promise
     const temFotos = Array.isArray(v.fotos) && (v.fotos as unknown[]).length > 0;
     const venceu = Date.now() - v.criado_em.getTime() > ESPERA_FOTOS_BR_MIN * 60000;
     if (!temFotos && !venceu && !forcar) return "aguardando_fotos";
-    await prisma.pedidoVideo.update({ where: { pedido_id: pedidoId }, data: { producao: "renderizando", erro_msg: null } });
+    await prisma.pedidoVideo.update({ where: { pedido_id: pedidoId }, data: { producao: "renderizando", erro_msg: null, concluido_em: null, entrega_whatsapp: false } });
     return chamar("BR_N8N_VIDEO_LETRA_WEBHOOK_URL", { pedido_id: pedidoId }, "vídeo com letra");
   } catch (e: any) {
     console.error("[bumps-br] dispararVideoBr:", pedidoId, e?.message);
@@ -109,7 +122,10 @@ export async function aoMusicaProntaBr(pedidoId: string): Promise<Record<string,
     if (!p || !Object.keys(b).length) return r;
     if (b.pagina !== undefined && !jaEnviadoBr(p.bumps_enviados, "pagina")) r.pagina = await chamar("BR_N8N_PAGINA_WEBHOOK_URL", { pedido_id: pedidoId }, "envio da página");
     if (b.estilo !== undefined && !p.song_id2) r.estilo = await chamar("BR_N8N_ESTILO_WEBHOOK_URL", { pedido_id: pedidoId }, "estilo extra");
-    if (b.video !== undefined) r.video = await dispararVideoBr(pedidoId);
+    if (b.video !== undefined) {
+      await aoPagarBr(pedidoId);   // o vídeo não foi criado no Pix? cria agora (e pede as fotos)
+      r.video = await dispararVideoBr(pedidoId);
+    }
   } catch (e: any) {
     console.error("[bumps-br] aoMusicaProntaBr:", pedidoId, e?.message);
   }
@@ -161,7 +177,7 @@ export async function marcarEnviadoBr(pedidoId: string, item: string): Promise<v
   await marcarEntregaBr(pedidoId, [item], "whats", true);
 }
 
-export type ItemEnvio = "musica" | "pagina" | "estilo" | "video" | "geral";
+export type ItemEnvio = "musica" | "pagina" | "estilo" | "video" | "geral" | "fotos" | "criar_video";
 
 /**
  * Botões do painel. "tudo" (Enviar) chama o envio da música de sempre (N8N_WEBHOOK_ENVIO_URL);
@@ -175,6 +191,12 @@ export async function reenviarBr(pedidoId: string, item: ItemEnvio | "tudo"): Pr
     select: { link_audio: true, link_pagina: true, song_id2: true, video: { select: { producao: true, opcoes: true } } },
   });
   if (!p) return { pedido: "nao_encontrado" };
+  // Vídeo do bump: reenviar o pedido de fotos / criar o vídeo que não nasceu no Pix
+  if (item === "fotos") return { fotos: await pedirFotosBr(pedidoId) };
+  if (item === "criar_video") {
+    const r = await aoPagarBr(pedidoId);
+    return { criar_video: r === "criado" ? "disparado" : r };
+  }
   // Envio geral: um e-mail só com a música e todo item já criado (fluxo "BR - Envio Geral")
   if (item === "geral") {
     return { geral: p.link_audio || p.link_pagina ? await chamar("BR_N8N_ENVIO_GERAL_WEBHOOK_URL", { pedido_id: pedidoId }, "envio geral") : "nao_gerado" };

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { filtroVideoErroBr } from "@/lib/video-estado";
 
 // Somente pedidos a partir do início da automação são contabilizados nos stats
 // Registros anteriores ficam no banco mas não afetam os indicadores
@@ -48,24 +48,14 @@ export async function GET() {
     }),
   ]);
 
-  // ── Upsell de vídeo ───────────────────────────────────────────────────
-  // "Erro de geração" inclui o render que falhou E o que travou: renderizando
-  // sem atualização, ou pago sem o render começar, há mais de VIDEO_TRAVADO_MIN.
-  const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
+  // ── Vídeo (upsell de fotos e vídeo com letra do order bump) ─────────────
+  // "Erro de geração" inclui o render que falhou E o que travou — mesma regra
+  // do estadoVideo (lib/video-estado.ts, filtroVideoErroBr).
   const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao, video_sem_rastreio] = await Promise.all([
     prisma.pedidoVideo.count(),
     prisma.pedidoVideo.count({ where: { status: "pago" } }),
     prisma.pedidoVideo.count({ where: { status: "pago", entrega_whatsapp: false } }),
-    prisma.pedidoVideo.count({
-      where: {
-        status: "pago",
-        OR: [
-          { producao: "erro" },
-          { producao: "renderizando", atualizado_em: { lt: travado } },
-          { producao: { in: ["fotos_enviadas", "aguardando_fotos"] }, pago_em: { lt: travado } },
-        ],
-      },
-    }),
+    prisma.pedidoVideo.count({ where: filtroVideoErroBr() }),
     // Pagou mas o fluxo track_upsell nunca marcou a venda como registrada
     prisma.pedidoVideo.count({ where: { status: "pago", rastreado: false } }),
   ]);

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { estadoVideo } from "@/lib/video-estado";
+import { dispararVideoBr, ehVideoLetra } from "@/lib/br-bumps";
 
 /*
   Botão "Refazer vídeo" do painel: manda o pedido pra produção de novo.
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { pedido_id: id },
     select: {
       status: true, producao: true, entrega_whatsapp: true, erro_msg: true,
-      atualizado_em: true, pago_em: true, concluido_em: true, fotos_em: true,
+      atualizado_em: true, pago_em: true, concluido_em: true, fotos_em: true, opcoes: true, criado_em: true,
     },
   });
 
@@ -49,6 +50,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { error: `Só dá pra refazer um vídeo com erro. Estado atual: ${estado.rotulo}.` },
       { status: 409 },
     );
+  }
+
+  // Vídeo com letra do order bump: fluxo "BR - Vídeo Letra" (sem esperar as fotos)
+  if (ehVideoLetra(video.opcoes)) {
+    const r = await dispararVideoBr(id, true);
+    if (r === "disparado") return NextResponse.json({ ok: true });
+    const msg = r === "aguardando_musica" ? "A música ainda não está pronta — o vídeo sai depois dela"
+      : r === "sem_url" ? "BR_N8N_VIDEO_LETRA_WEBHOOK_URL não configurada" : `Não deu pra disparar (${r})`;
+    return NextResponse.json({ error: msg }, { status: r === "sem_url" ? 500 : 409 });
   }
 
   const webhookUrl = process.env.N8N_WEBHOOK_VIDEO_URL;

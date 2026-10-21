@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { VIDEO_TRAVADO_MIN } from "@/lib/video-estado";
+import { filtroVideoErroBr } from "@/lib/video-estado";
 
 const LIMIT = 50;
 
@@ -60,18 +60,9 @@ export async function GET(req: NextRequest) {
     case "video_rastreio":
       where.video = { is: { status: "pago", rastreado: false } };
       break;
-    case "video_erro": {
-      const travado = new Date(Date.now() - VIDEO_TRAVADO_MIN * 60000);
-      where.video = { is: {
-        status: "pago",
-        OR: [
-          { producao: "erro" },
-          { producao: "renderizando", atualizado_em: { lt: travado } },
-          { producao: { in: ["fotos_enviadas", "aguardando_fotos"] }, pago_em: { lt: travado } },
-        ],
-      } };
+    case "video_erro":
+      where.video = { is: filtroVideoErroBr() };   // mesma regra do card (lib/video-estado.ts)
       break;
-    }
   }
 
   if (dataParam) {
@@ -110,7 +101,7 @@ export async function GET(req: NextRequest) {
         entrega_whatsapp: true,
         entrega_email: true,
         // upsell de vídeo, pra lista mostrar o estado dele
-        video: { select: { status: true, producao: true, entrega_whatsapp: true, erro_msg: true, atualizado_em: true, pago_em: true } },
+        video: { select: { status: true, producao: true, entrega_whatsapp: true, erro_msg: true, atualizado_em: true, pago_em: true, opcoes: true, criado_em: true } },
       },
       orderBy: { data_pedido: "asc" },
       skip: (page - 1) * LIMIT,

@@ -161,6 +161,7 @@ export default function PedidoPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao acionar envio");
       mostrarToast("ok", `Enviado ao cliente: ${data.enviados.join(", ")}`);
+      if (item === "criar_video") setTimeout(() => location.reload(), 1200);   // o quadro do vídeo aparece
     } catch (e: any) {
       mostrarToast("erro", e.message || "Erro ao enviar.");
     } finally {
@@ -243,7 +244,7 @@ export default function PedidoPage() {
     { item: "estilo", rotulo: `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`, mostra: !!bumps.estilo,
       gerado: !!pedido.link_audio2, href: pedido.link_pagina2 || pedido.link_audio2,
       whats: estado("estilo", "whats"), email: estado("estilo", "email") },
-    { item: "video", rotulo: `Vídeo com letra — ${bumps.video ? "bump" : "upsell"}`, mostra: !!v && (v.status === "pago" || videoLetra),
+    { item: "video", rotulo: videoLetra || bumps.video ? "Vídeo com letra — bump" : "Vídeo com fotos — upsell", mostra: !!bumps.video || v?.status === "pago",
       gerado: v?.producao === "concluido", href: v?.link,
       whats: estado("video", "whats", !!v?.entrega_whatsapp), email: estado("video", "email") },
   ].filter((l) => l.mostra);
@@ -345,7 +346,7 @@ export default function PedidoPage() {
         </div>
 
         {/* Compras — o que a pessoa pagou: a venda do front (com os bumps no mesmo Pix) e o upsell de vídeo */}
-        {(pedido.bumps || v) && (
+        {isAdmin && (pedido.bumps || v) && (
           <section className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Compras</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -353,19 +354,19 @@ export default function PedidoPage() {
               {bumps.video && <CompraBox titulo="Bump" descricao="Vídeo com letra" pago={pedido.status === "pago"} valor={real(bumps.video)} />}
               {bumps.estilo && <CompraBox titulo="Bump" descricao={`Estilo extra${pedido.estilo2 ? ` · ${pedido.estilo2}` : ""}`} pago={pedido.status === "pago"} valor={real(bumps.estilo)} />}
               {bumps.pagina && <CompraBox titulo="Bump" descricao="Página Premium" pago={pedido.status === "pago"} valor={real(bumps.pagina)} />}
-              {v && !bumps.video && <CompraBox titulo="Upsell" descricao="Vídeo com letra" pago={v.status === "pago"} valor={real(v.valor)} />}
+              {v && !bumps.video && <CompraBox titulo="Upsell" descricao="Vídeo com fotos" pago={v.status === "pago"} valor={real(v.valor)} />}
             </div>
           </section>
         )}
 
-        {/* Entregas — cinza: comprado, ainda não gerado · amarelo: gerado, não enviado · verde: enviado */}
+        {/* Entregas — WhatsApp e e-mail de cada item. Atendimento vê só o botão Enviar (como antes). */}
         <section className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Entregas</h2>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{isAdmin ? "Entregas" : "Enviar ao cliente"}</h2>
             <div className="flex flex-wrap gap-2">
               {/* Envio geral (só com order bump): um e-mail só com a música e os itens já criados ("BR - Envio Geral").
                   Enviar: o envio da música de sempre (WhatsApp + e-mail). */}
-              {pedido.bumps && <button
+              {isAdmin && pedido.bumps && <button
                 onClick={() => acionarEnvio("geral")}
                 disabled={!!enviando}
                 className="shrink-0 border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50 font-medium rounded-lg px-4 py-1.5 text-sm transition-colors"
@@ -381,19 +382,19 @@ export default function PedidoPage() {
               </button>
             </div>
           </div>
-          {falhas.length > 0 && (
+          {isAdmin && falhas.length > 0 && (
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 my-2">
               <strong>Falha de entrega:</strong> {falhas.join(" · ")}
             </p>
           )}
-          <div className="divide-y divide-gray-100">
+          {isAdmin && <div className="divide-y divide-gray-100">
             {linhas.map((l) => (
               <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} whats={l.whats} email={l.email} href={l.href}
                 /* a música sai pelo "Enviar" / "Envio geral" */
                 onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
                 enviando={enviando === l.item} />
             ))}
-          </div>
+          </div>}
         </section>
 
         {/* Grid: Cliente + Pedido */}
@@ -525,38 +526,56 @@ export default function PedidoPage() {
           </div>
         </section>
 
-        {/* Upsell de vídeo — só leitura: a atendente pega o link e o arquivo aqui */}
+        {/* Bump do vídeo pago e o vídeo não foi criado (o Pix caiu e a criação falhou) — só admin */}
+        {isAdmin && bumps.video && !v && pedido.status === "pago" && (
+          <section className="rounded-xl border p-5 bg-red-50 border-red-200">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo com letra — order bump</h2>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Vídeo não criado</span>
+            </div>
+            <p className="text-sm text-red-700 mb-4">Pago no Pix da música ({real(bumps.video)}), mas o vídeo não foi criado. Criar agora manda o e-mail das fotos; sem fotos, sai sozinho em 2 h.</p>
+            <button onClick={() => acionarEnvio("criar_video")} disabled={!!enviando}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
+              {enviando === "criar_video" ? "Criando..." : "🎬 Criar vídeo"}
+            </button>
+          </section>
+        )}
+
+        {/* Vídeo — dois tipos: com letra (order bump, no Pix da música) ou só de fotos (upsell /upvideo).
+            A atendente pega o link e o arquivo aqui; o detalhe da produção é do admin. */}
         {pedido.video && (() => {
           const v = pedido.video;
           const e = estadoVideo(v);
           const dt = (d?: string | Date | null) => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : null;
+          const valor = v.valor != null ? ` · R$ ${Number(v.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "";
           return (
             <section className={`rounded-xl border p-5 ${e.chave === "erro" ? "bg-red-50 border-red-200" : e.chave === "pendente_envio" ? "bg-yellow-50 border-yellow-200" : "bg-white border-gray-200"}`}>
               <div className="flex items-start justify-between gap-3 mb-4">
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">🎬 Vídeo (upsell)</h2>
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{videoLetra ? "🎬 Vídeo com letra — order bump" : "🎬 Vídeo com fotos — upsell"}</h2>
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${e.cor}`}>{e.rotulo}</span>
               </div>
               <p className={`text-sm mb-4 ${e.chave === "erro" ? "text-red-700" : e.chave === "pendente_envio" ? "text-yellow-800" : "text-gray-600"}`}>{e.detalhe}</p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <Campo label="Venda" valor={v.status === "pago" ? `Pago${v.valor != null ? ` · R$ ${Number(v.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}` : "Não pagou"} />
+              <div className={`grid grid-cols-2 gap-3 mb-4 ${isAdmin ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+                <Campo label="Venda" valor={v.status === "pago" ? `Pago${valor}${isAdmin ? (videoLetra ? " (order bump)" : " (upsell)") : ""}` : "Não pagou"} />
                 <Campo label="Produção" valor={PRODUCAO_LABEL[v.producao] ?? v.producao} />
                 <Campo label="Fotos" valor={v.fotos_qtd ? `${v.fotos_qtd} enviadas` : "nenhuma"} />
                 <Campo label="Entrega WhatsApp" valor={v.entrega_whatsapp ? "✓ Enviado" : "✕ Não enviado"} />
+                {isAdmin && <Campo label="Entrega e-mail" valor={estado("video", "email") === "ok" ? "✓ Enviado" : estado("video", "email") === "erro" ? "✕ Erro" : "—"} />}
               </div>
               {/* Rastreio e linha do tempo são diagnóstico de operação: não
                   ajudam quem está no atendimento e só competem por atenção
                   com o estado e os botões. Ficam só para o admin. */}
-              {isAdmin && v.status === "pago" && (
+              {isAdmin && v.status === "pago" && !videoLetra && (
                 <p className={`text-xs font-medium mb-4 ${v.rastreado ? "text-avocado-600" : "text-blue-700"}`}>
                   {v.rastreado ? "✓ Venda registrada na UTMify" : "Venda ainda não registrada na UTMify (sem rastreio)"}
                 </p>
               )}
               {isAdmin && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <Campo label="Link enviado" valor={dt(v.enviado_em) ?? "—"} />
+                  <Campo label={videoLetra ? "Pedido de fotos" : "Link enviado"} valor={dt(v.enviado_em) ?? "—"} />
                   <Campo label="Abriu o link" valor={dt(v.aberto_em) ?? "—"} />
-                  <Campo label="Pago em" valor={dt(v.pago_em) ?? "—"} />
+                  <Campo label={videoLetra ? "Fotos em" : "Pago em"} valor={dt(videoLetra ? v.fotos_em : v.pago_em) ?? "—"} />
                   <Campo label="Concluído em" valor={dt(v.concluido_em) ?? "—"} />
                 </div>
               )}
@@ -581,6 +600,12 @@ export default function PedidoPage() {
                 )}
                 {v.video_url && <LinkBtn href={v.video_url} label="▶️ Ver vídeo" />}
                 <LinkBtn href={v.link} label="🔗 Página do cliente" />
+                {isAdmin && videoLetra && v.producao === "aguardando_fotos" && (
+                  <button onClick={() => acionarEnvio("fotos")} disabled={!!enviando}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 text-sm font-medium transition-colors">
+                    {enviando === "fotos" ? "Enviando..." : "📧 Reenviar pedido de fotos"}
+                  </button>
+                )}
               </div>
               {e.chave === "pendente_envio" && (
                 <p className="text-xs text-yellow-800 mt-3">Baixe o vídeo e mande pro cliente no WhatsApp <span className="font-mono">{pedido.telefone}</span>.</p>

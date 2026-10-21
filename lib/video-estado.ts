@@ -13,6 +13,34 @@ export const VIDEO_TRAVADO_MIN = 20;
 // ES: o vídeo com letra grava a música inteira (~5–15 min na VPS, mais a fila)
 export const VIDEO_TRAVADO_MIN_ES = 60;
 
+/* BR tem dois vídeos (um por pedido):
+     order bump (no Pix da música)  vídeo COM LETRA  — opcoes.modelo = "letra", nasce pago
+                                     esperando fotos; sai sozinho sem fotos depois de 2 h
+     upsell (/upvideo, Pix próprio)  vídeo SÓ DE FOTOS — o de sempre */
+export const ESPERA_FOTOS_BR_MIN = 120;
+// a rotina "Reprocessa Bumps" roda a cada 10 min: passou disso, é porque não pegou
+const BUMP_ATRASADO_MIN = ESPERA_FOTOS_BR_MIN + 30;
+
+export function ehVideoLetraBr(opcoes: unknown): boolean {
+  return !!opcoes && typeof opcoes === "object" && (opcoes as any).modelo === "letra";
+}
+
+/** Filtro Prisma de "vídeo BR com erro" (lista e contador do painel), com a mesma regra do estadoVideo. */
+export function filtroVideoErroBr(agora = Date.now()) {
+  const antes = (m: number) => new Date(agora - m * 60000);
+  const letra = { opcoes: { path: ["modelo"], equals: "letra" } };
+  return {
+    status: "pago",
+    OR: [
+      { producao: "erro" },
+      { producao: "renderizando", atualizado_em: { lt: antes(VIDEO_TRAVADO_MIN) }, NOT: letra },
+      { producao: { in: ["fotos_enviadas", "aguardando_fotos"] }, pago_em: { lt: antes(VIDEO_TRAVADO_MIN) }, NOT: letra },
+      { AND: [letra], producao: { in: ["renderizando", "fotos_enviadas"] }, atualizado_em: { lt: antes(VIDEO_TRAVADO_MIN_ES) } },
+      { AND: [letra], producao: "aguardando_fotos", criado_em: { lt: antes(BUMP_ATRASADO_MIN) } },
+    ],
+  };
+}
+
 export type VideoResumo = {
   status: string;
   producao: string;
@@ -22,6 +50,8 @@ export type VideoResumo = {
   pago_em?: string | Date | null;
   concluido_em?: string | Date | null;
   fotos_em?: string | Date | null;
+  opcoes?: unknown;                  // { modelo: "letra" } = vídeo com letra do order bump
+  criado_em?: string | Date | null;
 };
 
 export type ChaveEstadoVideo =
@@ -61,9 +91,21 @@ export function estadoVideo(v: VideoResumo): EstadoVideo {
     return { chave: "pendente_envio", rotulo: "Pendente envio", detalhe: "Vídeo pronto, mas o WhatsApp não saiu. Baixe e envie pelo botão abaixo.", cor: amarelo };
   }
 
+  // Vídeo com letra do order bump: já nasce pago esperando as fotos (até 2 h), e o render é mais longo
+  const letra = ehVideoLetraBr(v.opcoes);
+  const travadoMin = letra ? VIDEO_TRAVADO_MIN_ES : VIDEO_TRAVADO_MIN;
+  if (letra && v.producao === "aguardando_fotos") {
+    const min = minutosDesde(v.criado_em);
+    if (min !== null && min > BUMP_ATRASADO_MIN) {
+      return { chave: "erro", rotulo: "Erro de geração", detalhe: `Sem fotos há ${Math.round(min / 60)} h e o vídeo não saiu sozinho. Confira se o Power Automate "BR - Reprocessa Bumps" está rodando, ou mande pra produção.`, cor: vermelho };
+    }
+    const sai = v.criado_em ? new Date(new Date(v.criado_em).getTime() + ESPERA_FOTOS_BR_MIN * 60000) : null;
+    return { chave: "sem_fotos", rotulo: "Aguardando fotos", detalhe: `O cliente ainda não enviou as fotos.${sai ? ` Se não enviar, o vídeo sai sem fotos às ${sai.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.` : ""}`, cor: cinza };
+  }
+
   if (v.producao === "renderizando") {
     const min = minutosDesde(v.atualizado_em);
-    if (min !== null && min > VIDEO_TRAVADO_MIN) {
+    if (min !== null && min > travadoMin) {
       return { chave: "erro", rotulo: "Erro de geração", detalhe: `Travado em "renderizando" há ${min} min. O container parou no meio; dispare o vídeo de novo no n8n.`, cor: vermelho };
     }
     return { chave: "renderizando", rotulo: "Renderizando", detalhe: "O vídeo está sendo feito agora. Leva alguns minutos.", cor: azul };
@@ -81,7 +123,7 @@ export function estadoVideo(v: VideoResumo): EstadoVideo {
     .filter((t) => !isNaN(t));
   const min = minutosDesde(ts.length ? new Date(Math.max(...ts)) : null);
 
-  if (min !== null && min > VIDEO_TRAVADO_MIN) {
+  if (min !== null && min > travadoMin) {
     return { chave: "erro", rotulo: "Erro de geração", detalhe: `Na fila há ${min} min e o render nunca começou. A produção não pegou o pedido; mande de novo pra produção.`, cor: vermelho };
   }
   return { chave: "renderizando", rotulo: "Aguardando render", detalhe: "Pagamento confirmado, esperando o render começar.", cor: azul };
