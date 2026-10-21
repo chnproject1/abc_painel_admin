@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { filtroVideoErroBr } from "@/lib/video-estado";
+import { idsBumpBr } from "@/lib/br-bumps";
+
+// Vídeo do UPSELL (/upvideo, só de fotos). O vídeo com letra do order bump conta em "Order bumps".
+// (bumps null entra pelo 1º ramo: NOT LIKE sozinho descartaria o vazio)
+const UPSELL = { pedido: { OR: [{ bumps: null }, { NOT: { bumps: { contains: "video:" } } }] } };
+
 
 const LIMIT = 50;
 
@@ -49,20 +55,26 @@ export async function GET(req: NextRequest) {
 
     // ── Upsell de vídeo: mesmos quatro cortes, sobre a tabela PedidoVideo ──
     case "video_todos":
-      where.video = { isNot: null };
+      where.video = { is: UPSELL };
       break;
     case "video_pagos":
-      where.video = { is: { status: "pago" } };
+      where.video = { is: { ...UPSELL, status: "pago" } };
       break;
     case "video_pendentes":
-      where.video = { is: { status: "pago", entrega_whatsapp: false } };
+      where.video = { is: { ...UPSELL, status: "pago", entrega_whatsapp: false } };
       break;
     case "video_rastreio":
-      where.video = { is: { status: "pago", rastreado: false } };
+      where.video = { is: { ...UPSELL, status: "pago", rastreado: false } };
       break;
     case "video_erro":
-      where.video = { is: filtroVideoErroBr() };   // mesma regra do card (lib/video-estado.ts)
+      where.video = { is: { AND: [UPSELL, filtroVideoErroBr()] } };   // mesma regra do card (lib/video-estado.ts)
       break;
+    default:
+      // Order bumps: bump_<pagina|estilo|video>_<todos|entregue|pendente|erro> (lib/br-entregas.ts)
+      if (filtro.startsWith("bump_")) {
+        const [, item, corte] = filtro.split("_");
+        where.id = { in: await idsBumpBr(item, corte) };
+      }
   }
 
   if (dataParam) {

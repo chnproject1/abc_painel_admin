@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { estadoVideo, PRODUCAO_LABEL, type VideoResumo } from "@/lib/video-estado";
+import { bumpsMapa, estadoCanal, linhasEntregaBr, type Cor, type EstadoCanal } from "@/lib/br-entregas";
 
 interface Pedido {
   id: string;
@@ -226,38 +227,12 @@ export default function PedidoPage() {
   const musicaGerada = pedido.gerou_musica || !!pedido.link_audio || !!pedido.link_pagina;
   const entregue = pedido.entrega_whatsapp || pedido.entrega_email;
 
-  // Order bumps (mesmo Pix) e o que já saiu — lib/br-bumps.ts
-  const bumps: Record<string, string> = Object.fromEntries(
-    String(pedido.bumps || "").split(",").filter(Boolean).map((b) => b.split(":") as [string, string]));
-  // Entrega por item e canal (tokens em bumps_enviados: "estilo.whats", "video.email!" = erro) — lib/br-bumps.ts
-  const tokens = String(pedido.bumps_enviados || "").split(",");
-  const estado = (item: string, canal: "whats" | "email", legado = false): Estado =>
-    tokens.includes(`${item}.${canal}!`) ? "erro"
-      : tokens.includes(`${item}.${canal}`) || legado || (canal === "whats" && tokens.includes(item)) ? "ok" : null;
+  // Order bumps (mesmo Pix), o envio de cada canal e a cor de cada linha — lib/br-entregas.ts
+  const bumps = bumpsMapa(pedido.bumps);
+  const estado = (item: string, canal: "whats" | "email") => estadoCanal(pedido.bumps_enviados, item, canal);
   const v = pedido.video;
   const videoLetra = v?.opcoes?.modelo === "letra";
-  /* Produção de cada item enquanto não foi gerado (o envio é lido pelos selos):
-       "erro" = pago e nada gerado (vermelho) · texto = ainda no prazo normal (cinza) */
-  const pago = pedido.status === "pago";
-  const semMusica: Producao = pago ? "erro" : "Aguardando o pagamento";
-  const minDesdeMusica = pedido.data_entrega ? (Date.now() - new Date(pedido.data_entrega).getTime()) / 60000 : null;
-  const ev = v ? estadoVideo(v) : null;
-  const linhas: Linha[] = [
-    { item: "musica", rotulo: "Música", mostra: true, gerado: musicaGerada, producao: semMusica,
-      whats: estado("musica", "whats", pedido.entrega_whatsapp), email: estado("musica", "email", pedido.entrega_email) },
-    { item: "pagina", rotulo: "Página Premium — bump", mostra: !!bumps.pagina, gerado: !!pedido.link_pagina, href: pedido.link_pagina,
-      producao: semMusica, whats: estado("pagina", "whats"), email: estado("pagina", "email") },
-    // a 2ª música sai depois da principal: o Suno leva alguns minutos
-    { item: "estilo", rotulo: `Estilo extra${pedido.estilo2 ? ` (${pedido.estilo2})` : ""} — bump`, mostra: !!bumps.estilo,
-      gerado: !!pedido.link_audio2, href: pedido.link_pagina2 || pedido.link_audio2,
-      producao: !musicaGerada ? (pago ? "Aguardando a música principal" : "Aguardando o pagamento")
-        : minDesdeMusica !== null && minDesdeMusica < 30 ? "Gerando a 2ª música" : "erro",
-      whats: estado("estilo", "whats"), email: estado("estilo", "email") },
-    { item: "video", rotulo: videoLetra || bumps.video ? "Vídeo com letra — bump" : "Vídeo com fotos — upsell", mostra: !!bumps.video || v?.status === "pago",
-      gerado: v?.producao === "concluido", href: v?.link,
-      producao: !v ? (pago ? "erro" : "Aguardando o pagamento") : ev?.chave === "erro" ? "erro" : ev?.rotulo ?? null,
-      whats: estado("video", "whats", !!v?.entrega_whatsapp), email: estado("video", "email") },
-  ].filter((l) => l.mostra);
+  const linhas = linhasEntregaBr(pedido);
   const falhas = linhas.flatMap((l) => [
     l.whats === "erro" ? `${l.rotulo.split(" — ")[0]} (WhatsApp)` : null,
     l.email === "erro" ? `${l.rotulo.split(" — ")[0]} (e-mail)` : null,
@@ -399,7 +374,7 @@ export default function PedidoPage() {
           )}
           {isAdmin && <div>
             {linhas.map((l) => (
-              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} producao={l.producao} whats={l.whats} email={l.email} href={l.href}
+              <Entrega key={l.item} label={l.rotulo} gerado={l.gerado} cor={l.cor} texto={l.texto} whats={l.whats} email={l.email} href={l.href}
                 /* a música sai pelo "Enviar" / "Envio geral" */
                 onReenviar={l.item === "musica" || (l.item === "video" && !videoLetra) ? undefined : () => acionarEnvio(l.item)}
                 enviando={enviando === l.item} />
@@ -643,7 +618,7 @@ function CompraBox({ titulo, descricao, pago, valor }: { titulo: string; descric
   );
 }
 
-type Estado = "ok" | "erro" | null;
+type Estado = EstadoCanal;
 
 function Selo({ canal, estado }: { canal: string; estado: Estado }) {
   const [cor, marca] = estado === "ok" ? ["bg-green-100 text-green-700", "✓"]
@@ -651,24 +626,18 @@ function Selo({ canal, estado }: { canal: string; estado: Estado }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cor}`}>{marca} {canal}</span>;
 }
 
-type Producao = "erro" | string | null;   // "erro" = pago e nada gerado · texto = em andamento
-type Linha = { item: string; rotulo: string; mostra: boolean; gerado: boolean; producao: Producao; href?: string | null; whats: Estado; email: Estado };
+/* Uma linha de Entregas, com a cor do estado (regra em lib/br-entregas.ts, a mesma do início):
+     verde entregue · amarelo erro no envio / não enviado · vermelho pago e nada gerado · cinza em produção */
+const COR_LINHA: Record<Cor, [string, string]> = {
+  verde: ["bg-green-50", "text-green-700"], amarelo: ["bg-yellow-50", "text-yellow-700"],
+  vermelho: ["bg-red-50", "text-red-600"], cinza: ["bg-gray-50", "text-gray-500"],
+};
 
-/* Uma linha de Entregas, com a cor do estado (mesmo padrão do ES):
-     verde    gerado e enviado, sem erro
-     amarelo  gerado, mas o envio deu erro em algum canal ou não saiu
-     vermelho pago e nada gerado (erro de produção)
-     cinza    ainda em produção, no prazo normal */
-function Entrega({ label, gerado, producao, whats, email, onReenviar, enviando, href }: {
-  label: string; gerado: boolean; producao: Producao; whats: Estado; email: Estado;
+function Entrega({ label, gerado, cor: c, texto, whats, email, onReenviar, enviando, href }: {
+  label: string; gerado: boolean; cor: Cor; texto: string; whats: EstadoCanal; email: EstadoCanal;
   onReenviar?: () => void; enviando?: boolean; href?: string | null;
 }) {
-  const [fundo, cor, texto] = !gerado
-    ? producao === "erro" ? ["bg-red-50", "text-red-600", "✕ Pago — nada gerado"]
-      : ["bg-gray-50", "text-gray-500", `⏳ ${producao ?? "Em produção"}`]
-    : whats === "erro" || email === "erro" ? ["bg-yellow-50", "text-yellow-700", "● Gerado — erro no envio"]
-    : whats === "ok" || email === "ok" ? ["bg-green-50", "text-green-700", "✓ Entregue"]
-    : ["bg-yellow-50", "text-yellow-700", "● Gerado — não enviado"];
+  const [fundo, cor] = COR_LINHA[c];
   return (
     <div className={`py-3 px-3 my-1 rounded-lg flex flex-wrap items-center gap-2 sm:gap-3 ${fundo}`}>
       <p className="text-sm font-medium text-gray-700 flex-1 min-w-[10rem]">{label}</p>

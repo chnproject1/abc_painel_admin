@@ -31,7 +31,11 @@ interface Stats {
   erro_geracao: number;
   pendentes_rastreio: number;
   video?: { total: number; pagos: number; pendentes_envio: number; erro_geracao: number; sem_rastreio: number };
+  // Order bumps por item — mesma regra das cores do pedido (lib/br-entregas.ts)
+  bumps?: Record<string, { todos: number; entregue: number; pendente: number; erro: number }>;
 }
+
+const BUMPS_INICIO: [string, string][] = [["pagina", "Página Premium"], ["estilo", "Estilo extra"], ["video", "Vídeo com letra"]];
 
 const STATUS_COR: Record<string, string> = {
   pendente:    "bg-gray-100 text-gray-500",
@@ -47,12 +51,18 @@ const FILTRO_LABEL: Record<string, string> = {
   pendentes: "Pendentes envio",
   erro:      "Erro de geração",
   rastreio:  "Pendentes de rastreio",
-  video_todos:     "Vídeo: todos os links",
-  video_pagos:     "Vídeo: compraram",
-  video_pendentes: "Vídeo: pendentes envio",
-  video_erro:      "Vídeo: erro de geração",
-  video_rastreio:  "Vídeo: sem rastreio",
+  video_todos:     "Vídeo (upsell): todos os links",
+  video_pagos:     "Vídeo (upsell): compraram",
+  video_pendentes: "Vídeo (upsell): pendentes envio",
+  video_erro:      "Vídeo (upsell): erro de geração",
+  video_rastreio:  "Vídeo (upsell): sem rastreio",
 };
+// Order bumps: bump_<item>_<corte>
+for (const [item, rotulo] of [["pagina", "Página Premium"], ["estilo", "Estilo extra"], ["video", "Vídeo com letra"]]) {
+  for (const [corte, nome] of [["todos", "compraram"], ["entregue", "entregues"], ["pendente", "pendentes envio"], ["erro", "erro de geração"]]) {
+    FILTRO_LABEL[`bump_${item}_${corte}`] = `${rotulo}: ${nome}`;
+  }
+}
 
 function StatCard({
   label, value, cor, ativo, onClick,
@@ -308,8 +318,28 @@ function DashboardContent() {
               <StatCard label="Erro de geração" value={stats.erro_geracao}    cor="bg-red-50 border-red-200 text-red-800"            ativo={filtroAtivo === "erro"}      onClick={() => handleCardClick("erro")} />
               <StatCard label="Sem rastreio"    value={stats.pendentes_rastreio} cor="bg-blue-50 border-blue-200 text-blue-800"      ativo={filtroAtivo === "rastreio"}  onClick={() => handleCardClick("rastreio")} />
             </div>
+            {stats.bumps && (<>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Order bumps</h2>
+              <div className="space-y-4">
+                {BUMPS_INICIO.map(([item, rotulo]) => {
+                  const b = stats.bumps![item]; if (!b) return null;
+                  const f = (c: string) => `bump_${item}_${c}`;
+                  return (
+                    <div key={item}>
+                      <p className="text-xs font-semibold text-gray-400 mb-2">{rotulo}</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                        <StatCard label="Compraram"       value={b.todos}    cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === f("todos")}    onClick={() => handleCardClick(f("todos"))} />
+                        <StatCard label="Entregues"       value={b.entregue} cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === f("entregue")} onClick={() => handleCardClick(f("entregue"))} />
+                        <StatCard label="Pendentes envio" value={b.pendente} cor="bg-yellow-50 border-yellow-200 text-yellow-800" ativo={filtroAtivo === f("pendente")} onClick={() => handleCardClick(f("pendente"))} />
+                        <StatCard label="Erro de geração" value={b.erro}     cor="bg-red-50 border-red-200 text-red-800"          ativo={filtroAtivo === f("erro")}     onClick={() => handleCardClick(f("erro"))} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>)}
             {stats.video && (<>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Vídeo (upsell)</h2>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6">Vídeo com fotos (upsell)</h2>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                 <StatCard label="Links enviados"  value={stats.video.total}           cor="bg-white border-gray-200 text-gray-800"        ativo={filtroAtivo === "video_todos"}     onClick={() => handleCardClick("video_todos")} />
                 <StatCard label="Pagas"           value={stats.video.pagos}           cor="bg-green-50 border-green-200 text-green-800"    ativo={filtroAtivo === "video_pagos"}     onClick={() => handleCardClick("video_pagos")} />

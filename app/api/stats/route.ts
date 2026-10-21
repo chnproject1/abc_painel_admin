@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { filtroVideoErroBr } from "@/lib/video-estado";
+import { contarBumpsBr } from "@/lib/br-bumps";
+
+// Vídeo do UPSELL (/upvideo, só de fotos). O vídeo com letra do order bump conta em "Order bumps".
+// (bumps null entra pelo 1º ramo: NOT LIKE sozinho descartaria o vazio)
+const UPSELL = { pedido: { OR: [{ bumps: null }, { NOT: { bumps: { contains: "video:" } } }] } };
+
 
 // Somente pedidos a partir do início da automação são contabilizados nos stats
 // Registros anteriores ficam no banco mas não afetam os indicadores
@@ -48,20 +54,24 @@ export async function GET() {
     }),
   ]);
 
-  // ── Vídeo (upsell de fotos e vídeo com letra do order bump) ─────────────
+  // ── Vídeo do upsell (só de fotos) ────────────────────────────────────
   // "Erro de geração" inclui o render que falhou E o que travou — mesma regra
   // do estadoVideo (lib/video-estado.ts, filtroVideoErroBr).
   const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao, video_sem_rastreio] = await Promise.all([
-    prisma.pedidoVideo.count(),
-    prisma.pedidoVideo.count({ where: { status: "pago" } }),
-    prisma.pedidoVideo.count({ where: { status: "pago", entrega_whatsapp: false } }),
-    prisma.pedidoVideo.count({ where: filtroVideoErroBr() }),
+    prisma.pedidoVideo.count({ where: UPSELL }),
+    prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago" } }),
+    prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago", entrega_whatsapp: false } }),
+    prisma.pedidoVideo.count({ where: { AND: [UPSELL, filtroVideoErroBr()] } }),
     // Pagou mas o fluxo track_upsell nunca marcou a venda como registrada
-    prisma.pedidoVideo.count({ where: { status: "pago", rastreado: false } }),
+    prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago", rastreado: false } }),
   ]);
+
+  // ── Order bumps: por item, com a regra das cores do pedido (lib/br-entregas.ts) ──
+  const bumps = await contarBumpsBr();
 
   return NextResponse.json({
     total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio,
+    bumps,
     video: { total: video_total, pagos: video_pagos, pendentes_envio: video_pendentes_envio, erro_geracao: video_erro_geracao, sem_rastreio: video_sem_rastreio },
   });
 }

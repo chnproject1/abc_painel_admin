@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkVideo, sufixoLink } from "@/lib/video";
 import { ESPERA_FOTOS_BR_MIN, ehVideoLetraBr } from "@/lib/video-estado";
+import { cortesBumpBr, ITENS_BUMP, type CorteBump } from "@/lib/br-entregas";
 
 /*
   ORDER BUMPS DO BR (QUIZ BR V2) — pagos no MESMO Pix da música.
@@ -212,4 +213,38 @@ export async function reenviarBr(pedidoId: string, item: ItemEnvio | "tudo"): Pr
   }
   const videoPronto = !!p.video && ehVideoLetra(p.video.opcoes) && p.video.producao === "concluido";
   return { video: videoPronto ? await chamar("BR_N8N_VIDEO_LETRA_WEBHOOK_URL", { pedido_id: pedidoId, reenviar: true }, "reenvio do vídeo") : "nao_gerado" };
+}
+
+/* ── Início do painel: Order bumps por item (Compraram · Entregues · Pendentes · Erro) ──
+   Pedidos com bump são poucos: lê só esses e classifica com a mesma regra das cores
+   do pedido (lib/br-entregas.ts), então o número do quadro é a lista que abre. */
+async function pedidosComBumpBr() {
+  const ps = await prisma.pedido.findMany({
+    where: { bumps: { not: null }, status: { in: ["pago", "cancelado"] } },
+    select: {
+      id: true, status: true, bumps: true, bumps_enviados: true, estilo2: true, gerou_musica: true,
+      link_audio: true, link_pagina: true, link_audio2: true, link_pagina2: true, data_entrega: true,
+      entrega_whatsapp: true, entrega_email: true,
+      video: { select: { status: true, producao: true, entrega_whatsapp: true, erro_msg: true, atualizado_em: true, pago_em: true, concluido_em: true, fotos_em: true, opcoes: true, criado_em: true } },
+    },
+  });
+  return ps;
+}
+
+export async function contarBumpsBr(): Promise<Record<string, Record<CorteBump, number>>> {
+  const ps = await pedidosComBumpBr();
+  const agora = Date.now();
+  const out: Record<string, Record<CorteBump, number>> = {};
+  for (const item of ITENS_BUMP) {
+    out[item] = { todos: 0, entregue: 0, pendente: 0, erro: 0 };
+    for (const p of ps) for (const c of cortesBumpBr(p, item, agora)) out[item][c]++;
+  }
+  return out;
+}
+
+export async function idsBumpBr(item: string, corte: string): Promise<string[]> {
+  if (!(ITENS_BUMP as readonly string[]).includes(item)) return [];
+  const ps = await pedidosComBumpBr();
+  const agora = Date.now();
+  return ps.filter((p) => cortesBumpBr(p, item as (typeof ITENS_BUMP)[number], agora).includes(corte as CorteBump)).map((p) => p.id);
 }
