@@ -33,6 +33,11 @@ export async function GET(req: NextRequest) {
       where.status = "pago";
       where.data_pedido = { gte: INICIO_AUTOMACAO };
       break;
+    case "entregues":
+      where.status = "pago";
+      where.OR = [{ entrega_whatsapp: true }, { entrega_email: true }];
+      where.data_pedido = { gte: INICIO_AUTOMACAO };
+      break;
     case "pendentes":
       where.status = "pago";
       // não entregue — ou algum item com falha de entrega ("estilo.whats!"), mesmo com a música entregue
@@ -59,6 +64,9 @@ export async function GET(req: NextRequest) {
       break;
     case "video_pagos":
       where.video = { is: { ...UPSELL, status: "pago" } };
+      break;
+    case "video_entregues":
+      where.video = { is: { ...UPSELL, status: "pago", entrega_whatsapp: true } };
       break;
     case "video_pendentes":
       where.video = { is: { ...UPSELL, status: "pago", entrega_whatsapp: false } };

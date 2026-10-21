@@ -20,7 +20,7 @@ export async function GET() {
 
   const filtroBase = { data_pedido: { gte: INICIO_AUTOMACAO } };
 
-  const [total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio] = await Promise.all([
+  const [total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio, entregues] = await Promise.all([
     // Total que iniciaram checkout
     prisma.pedido.count({ where: filtroBase }),
 
@@ -52,26 +52,32 @@ export async function GET() {
     prisma.pedido.count({
       where: { ...filtroBase, status: "pago", rastreado: false },
     }),
+
+    // Pagaram e a música chegou (WhatsApp ou e-mail)
+    prisma.pedido.count({
+      where: { ...filtroBase, status: "pago", OR: [{ entrega_whatsapp: true }, { entrega_email: true }] },
+    }),
   ]);
 
   // ── Vídeo do upsell (só de fotos) ────────────────────────────────────
   // "Erro de geração" inclui o render que falhou E o que travou — mesma regra
   // do estadoVideo (lib/video-estado.ts, filtroVideoErroBr).
-  const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao, video_sem_rastreio] = await Promise.all([
+  const [video_total, video_pagos, video_pendentes_envio, video_erro_geracao, video_sem_rastreio, video_entregues] = await Promise.all([
     prisma.pedidoVideo.count({ where: UPSELL }),
     prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago" } }),
     prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago", entrega_whatsapp: false } }),
     prisma.pedidoVideo.count({ where: { AND: [UPSELL, filtroVideoErroBr()] } }),
     // Pagou mas o fluxo track_upsell nunca marcou a venda como registrada
     prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago", rastreado: false } }),
+    prisma.pedidoVideo.count({ where: { ...UPSELL, status: "pago", entrega_whatsapp: true } }),
   ]);
 
   // ── Order bumps: por item, com a regra das cores do pedido (lib/br-entregas.ts) ──
   const bumps = await contarBumpsBr();
 
   return NextResponse.json({
-    total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio,
+    total, pagos, pendentes_envio, erro_geracao, pendentes_rastreio, entregues,
     bumps,
-    video: { total: video_total, pagos: video_pagos, pendentes_envio: video_pendentes_envio, erro_geracao: video_erro_geracao, sem_rastreio: video_sem_rastreio },
+    video: { total: video_total, pagos: video_pagos, pendentes_envio: video_pendentes_envio, erro_geracao: video_erro_geracao, sem_rastreio: video_sem_rastreio, entregues: video_entregues },
   });
 }
