@@ -12,6 +12,15 @@ export async function marcarRastreio(id: string, oferta: string, valor: boolean)
   if (!coluna) {
     return { success: false, error: `oferta desconhecida: ${oferta}. Válidas: ${Object.keys(COLUNA_RASTREIO).join(", ")}` };
   }
+  /* Funil de 2026-10-30: vídeo (up1/ds1) marca no PedidoVideoEs; ds4 (os três)
+     marca página, estilo e vídeo de uma vez. */
+  if (coluna === "video" || coluna === "combo") {
+    const existe = await prisma.pedidoEs.findUnique({ where: { id }, select: { id: true, video: { select: { pedido_id: true } } } });
+    if (!existe) return { success: false, error: `Pedido ${id} não encontrado em PedidoEs (operação ES (LATAM))` };
+    if (coluna === "combo") await prisma.pedidoEs.update({ where: { id }, data: { up1_rastreado: valor, up2_rastreado: valor } });
+    if (existe.video) await prisma.pedidoVideoEs.update({ where: { pedido_id: id }, data: { rastreado: valor } });
+    return { success: true, ja_estava: false, oferta, coluna, message: valor ? "Venda marcada como rastreada" : "Rastreio desmarcado" };
+  }
   const atual: any = await prisma.pedidoEs.findUnique({
     where: { id },
     select: { rastreado: true, up1_rastreado: true, up2_rastreado: true, ds_rastreado: true,

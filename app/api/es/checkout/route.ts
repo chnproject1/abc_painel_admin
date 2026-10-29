@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
-import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe } from "@/lib/es-ofertas";
+import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe, OFERTA_DO_PRODUTO, funilNovoEs } from "@/lib/es-ofertas";
 import { avisarVideoLiberadoEs, dispararPaginaEs, dispararEstiloEs, garantirVideoCartoonEs, ehCartoon } from "@/lib/video-es-producao";
 import { marcarRastreio } from "@/lib/es-rastreio";
 
@@ -102,6 +102,10 @@ function derivarOfertas(linha: {
   if (linha.upsell_status === "recusado") {
     // O produto recusado vem no início do upsell_erro, no formato "produto:codigo"
     const produto = String(linha.upsell_erro ?? "").split(":")[0].replace("-teste", "");
+    // Funil de 2026-10-30 (lib/es-ofertas.ts): página → coluna up1, estilo → coluna up2
+    if (produto === "pagina_up" || produto === "pagina_ds") { out.up1_status = "recusado"; return out; }
+    if (produto === "estilo_up" || produto === "estilo_ds") { out.up2_status = "recusado"; return out; }
+    if (produto in OFERTA_DO_PRODUTO) return out;   // vídeo / ds4: nada a marcar
     if (produto === "pagina")  out.up1_status = "recusado";
     if (produto === "estilo" || produto === "versoes" || produto === "video") out.up2_status = "recusado";
     if (produto === "combo"   || /^ds[123]?$/.test(produto)) out.ds_status  = "recusado";
@@ -130,6 +134,27 @@ function derivarOfertas(linha: {
   // cada valor fica com a oferta dele — nunca somar.
   entregues.forEach((produto, i) => {
     const v = parseFloat(valores[i] ?? "");
+    /* Funil de 2026-10-30: registro por PRODUTO, sem downsell deduzido. O vídeo
+       (video_up / video_ds) vai no bump1, que o create-upsell grava junto. O ds4
+       entrega os três: o valor se divide em 3 (vídeo, página e estilo). */
+    const p = produto.replace(/-teste$/, "");
+    if (p === "pagina_up" || p === "pagina_ds") {
+      out.up1_status = "pago";
+      if (Number.isFinite(v)) out.up1_valor = v;
+      return;
+    }
+    if (p === "estilo_up" || p === "estilo_ds") {
+      out.up2_status = "pago";
+      if (Number.isFinite(v)) out.up2_valor = v;
+      return;
+    }
+    if (p === "combo4") {
+      out.up1_status = "pago";
+      out.up2_status = "pago";
+      if (Number.isFinite(v)) { out.up1_valor = Math.round((v / 3) * 100) / 100; out.up2_valor = Math.round((v / 3) * 100) / 100; }
+      return;
+    }
+    if (p in OFERTA_DO_PRODUTO) return;   // video_up / video_ds: bump1
     if (produto === "pagina") {
       out.up1_status = "pago";
       if (Number.isFinite(v)) out.up1_valor = v;
@@ -553,7 +578,7 @@ export async function POST(req: NextRequest) {
       if (up1_status === null) { up1_status = "recusado"; update.up1_status = "recusado"; }
       if (up2_status === null) { up2_status = "recusado"; update.up2_status = "recusado"; }
       // O ds é ofertado a quem recusou pelo menos uma das duas
-      if (dsFoiOfertado({ up1_status, up2_status }) && ds_status === null) {
+      if (!funilNovoEs(atual) && dsFoiOfertado({ up1_status, up2_status }) && ds_status === null) {
         ds_status = "recusado";
         update.ds_status = "recusado";
       }
@@ -562,7 +587,9 @@ export async function POST(req: NextRequest) {
   }
 
   // O plano acompanha os status das ofertas
-  update.plano = montarPlanoEs(tier, { up1_status, up2_status, ds_status });
+  /* Funil de 2026-10-30: o plano (silver_up1_ds2) vem pronto do create-upsell
+     e não é recalculado. Nos antigos, o nome do downsell em `upsell` decide. */
+  if (!funilNovoEs(atual)) update.plano = montarPlanoEs(tier, { up1_status, up2_status, ds_status, upsell: atual.upsell });
 
   const pedido = await prisma.pedidoEs.update({
     where: { id: data.id },

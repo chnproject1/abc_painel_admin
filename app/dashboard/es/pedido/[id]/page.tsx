@@ -80,6 +80,8 @@ interface PedidoEs {
     link: string; ver_link: string; video_url?: string | null;
     cartoon?: boolean; lookalike?: boolean;   // vídeo com letra (Order 1) / + fotos (Plus)
   } | null;
+  /* funil de 2026-10-30: por qual oferta (up1…ds4) cada produto entrou; null = funil antigo */
+  ofertas_novas?: { video: string | null; pagina: string | null; estilo: string | null } | null;
   bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo com letra, Plus = + fotos)
   bump2?: string | null; bump2_valor?: string | null;   // order bump 2 (livre)
 }
@@ -278,6 +280,17 @@ export default function PedidoEsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {/* Rastreio por oferta: cada uma é um pedido próprio na UTMify. Só admin. */}
             <OfertaBox titulo="Venda inicial" descricao="Música 1"        status={pedido.status}     valor={usd(pedido.valor)}     rastreado={isAdmin ? pedido.rastreado : undefined} />
+            {pedido.ofertas_novas ? (() => {
+              /* Funil de 2026-10-30: um quadro por PRODUTO, com a oferta pela qual entrou */
+              const o = pedido.ofertas_novas;
+              const rot = (of: string | null) => of ? of.toUpperCase() : "não comprado";
+              const temVideoLetra = !!pedido.bump1 && pedido.bump1.includes("video");
+              return (<>
+                <OfertaBox titulo="Vídeo com letra" descricao={o.video ? `Comprado no ${rot(o.video)}` : "up1 · ds1 · ds4"} status={temVideoLetra ? "pago" : null} valor={usd(pedido.bump1_valor)} rastreado={isAdmin ? pedido.video?.rastreado : undefined} />
+                <OfertaBox titulo="Página Premium" descricao={o.pagina ? `Comprada no ${rot(o.pagina)}` : "up2 · ds2 · ds4"} status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
+                <OfertaBox titulo="Estilo extra" descricao={o.estilo ? `${pedido.estilo2 ?? "Estilo"} · ${rot(o.estilo)}` : "up3 · ds3 · ds4"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
+              </>);
+            })() : (<>
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
             <OfertaBox titulo="Upsell 2"      descricao={pedido.estilo2 ? `Estilo extra · ${pedido.estilo2}` : temExtras ? "Músicas 2 e 3" : temVideo && !pedido.video?.cartoon ? "Vídeo com fotos" : "Estilo extra"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
             {pedido.bump1 && pedido.bump1 !== "nao" && (
@@ -287,6 +300,7 @@ export default function PedidoEsPage() {
               <OfertaBox titulo="Bump 2" descricao={pedido.bump2} status={pedido.status} valor={usd(pedido.bump2_valor)} />
             )}
             <OfertaBox titulo="Downsell"      descricao={dsTipo ? DS_ROTULO[dsTipo] : (temExtras ? "Página + músicas" : "O que faltou")} status={pedido.ds_status}  valor={usd(pedido.ds_valor)} rastreado={isAdmin ? pedido.ds_rastreado : undefined} />
+            </>)}
           </div>
         </section>
 

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { selectPorRoleUs } from "@/lib/columns";
 import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { ehCartoon } from "@/lib/video-es-producao";
+import { funilNovoEs, ofertasPorProduto } from "@/lib/es-ofertas";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -33,7 +34,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // vídeo cartoon (order bump) ou vídeo com fotos (funil antigo)
     cartoon: ehCartoon(v.opcoes), lookalike: ehCartoon(v.opcoes) && !!(v.opcoes as any).lookalike,
   } : null;
-  return NextResponse.json({ ...pedido, video });
+  /* Funil de 2026-10-30: por qual oferta (up1…ds4) cada produto entrou. Calculado
+     aqui porque a lista bruta (`upsell`) só vai pro admin. */
+  const bruto = await prisma.pedidoEs.findUnique({ where: { id }, select: { upsell: true, upsell_erro: true } });
+  const ofertas_novas = bruto && funilNovoEs(bruto) ? ofertasPorProduto(bruto) : null;
+  return NextResponse.json({ ...pedido, video, ofertas_novas });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

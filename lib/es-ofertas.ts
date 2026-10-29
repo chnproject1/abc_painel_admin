@@ -19,6 +19,43 @@
   Puro, sem imports de servidor: usado nas rotas e nas páginas (client).
 */
 
+/* ── Funil de 2026-10-30 (QUIZ ES V2 e recuperação) ─────────────────────
+   up1 vídeo com letra → ds1 · up2 página → ds2 · up3 estilo → ds3 · ds4 os três
+   (só pra quem não comprou nenhum). Cada compra entra em `upsell` com um NOME
+   PRÓPRIO (abaixo), que não colide com os nomes antigos — assim o pedido novo é
+   reconhecido e nada é deduzido: o que foi comprado é o que é entregue.
+   No painel o registro é por PRODUTO: vídeo → bump1 ('video') · página →
+   up1_status/up1_valor · estilo → up2_status/up2_valor (+ estilo2). O
+   ds_status fica só pros pedidos antigos. */
+export const OFERTA_DO_PRODUTO = {
+  video_up: "up1", video_ds: "ds1",
+  pagina_up: "up2", pagina_ds: "ds2",
+  estilo_up: "up3", estilo_ds: "ds3",
+  combo4: "ds4",
+} as const;
+export type ProdutoNovo = keyof typeof OFERTA_DO_PRODUTO;
+const ehProdutoNovo = (p: string): p is ProdutoNovo => p in OFERTA_DO_PRODUTO;
+const listaUpsell = (v?: string | null) => String(v ?? "").split(",").map((x) => x.trim().replace(/-teste$/, "")).filter(Boolean);
+
+/** Pedido do funil de 2026-10-30: comprou ou recusou alguma oferta com nome novo. */
+export function funilNovoEs(o: { upsell?: string | null; upsell_erro?: string | null }): boolean {
+  return [...listaUpsell(o.upsell), String(o.upsell_erro ?? "").split(":")[0].replace(/-teste$/, "")].some(ehProdutoNovo);
+}
+
+/** Funil novo: por qual oferta cada produto entrou (null = não comprou). */
+export function ofertasPorProduto(o: { upsell?: string | null }) {
+  const comprados = listaUpsell(o.upsell).filter(ehProdutoNovo);
+  const de = (...ps: ProdutoNovo[]) => {
+    const p = comprados.find((x) => ps.includes(x));
+    return p ? OFERTA_DO_PRODUTO[p] : null;
+  };
+  return {
+    video:  de("video_up", "video_ds", "combo4"),
+    pagina: de("pagina_up", "pagina_ds", "combo4"),
+    estilo: de("estilo_up", "estilo_ds", "combo4"),
+  };
+}
+
 export type StatusOferta = string | null | undefined;
 
 export type OfertasEs = {
@@ -29,6 +66,8 @@ export type OfertasEs = {
   estilo2?: string | null;
   bump1?: string | null;           // order bump 1 do checkout: "video" | "video,lookalike"
   bump2?: string | null;           // order bump 2 do checkout (livre, próximo produto)
+  upsell?: string | null;          // produtos pagos (funil de 2026-10-30: nomes de OFERTA_DO_PRODUTO)
+  upsell_erro?: string | null;
 };
 
 /* Order 1 = vídeo com a letra animada + até 15 fotos na moldura ("video"; os pedidos
@@ -44,6 +83,9 @@ export type DsTipo = "ds1" | "ds2" | "ds3";
 
 /** Qual downsell foi (ou seria) oferecido, dado o que já estava pago. */
 export function dsTipoDe(o: OfertasEs): DsTipo {
+  // o nome gravado em `upsell` vale mais que a dedução (ver liberacoes)
+  const nome = listaUpsell(o.upsell).find((x) => /^ds[123]$/.test(x));
+  if (nome) return nome as DsTipo;
   const up1 = o.up1_status === "pago";
   const up2 = o.up2_status === "pago";
   if (up2 && !up1) return "ds1";   // tenta vender a página
@@ -65,11 +107,20 @@ export function dsFoiOfertado(o: OfertasEs): boolean {
 /** O que o cliente tem direito de receber. */
 export function liberacoes(o: OfertasEs) {
   const ds = o.ds_status === "pago";
-  const pagina = o.up1_status === "pago" || (ds && o.up1_status !== "pago");
+  /* Qual downsell foi: o NOME gravado em `upsell` vale mais que a dedução pelos
+     status. ds1 sempre foi só a página; ds2 só o 2º produto; ds3 os dois. Sem o
+     nome (pedidos antigos do US) cai na dedução de antes. Corrige o funil de
+     29/10, que oferecia o ds1 logo depois da página recusada. */
+  const dsNome = listaUpsell(o.upsell).find((x) => /^ds[123]$/.test(x));
+  const dsPagina = ds && (dsNome ? dsNome !== "ds2" : o.up1_status !== "pago");
+  const dsExtra  = ds && (dsNome ? dsNome !== "ds1" : o.up2_status !== "pago");
+  const pagina = o.up1_status === "pago" || dsPagina;
   // O 2º produto do funil (up2, ou o ds2/ds3): estilo nos pedidos novos, vídeo nos antigos
-  const extra  = o.up2_status === "pago" || (ds && o.up2_status !== "pago");
+  const extra  = o.up2_status === "pago" || dsExtra;
   const estilo = extra && !!o.estilo2;
-  const video  = extra && !o.estilo2;
+  /* Vídeo com fotos (o up2 antigo): nunca no funil de 2026-10-30, que não vende
+     esse produto — lá o vídeo é o com letra (bump1), em video_cartoon abaixo. */
+  const video  = extra && !o.estilo2 && !funilNovoEs(o);
   // Vídeo com letra (Order 1): só a música principal vira vídeo — nunca a do estilo extra
   const video_cartoon = o.status === "pago" && bumpTem(o, "video");
   // Desde 2026-10-16 o vídeo vem SEMPRE com as fotos (até 15): o +US$3 do Plus saiu.
@@ -111,14 +162,21 @@ export const WHERE_PAGINA_LIBERADA = {
    Cada oferta é um pedido próprio na UTMify (<id>, <id>_up1, _up2, _ds1…) e
    tem o próprio campo "já registrado". O fluxo de rastreio marca com
    { action: "rastreado", oferta } — os nomes são os que o rastreio-api usa. */
+/* Funil de 2026-10-30: o rótulo diz o PRODUTO. up1/ds1 = vídeo (marca no
+   PedidoVideoEs), up2/ds2 = página (up1_rastreado), up3/ds3 = estilo
+   (up2_rastreado), ds4 = os três. "video" e "combo" são tratados em
+   lib/es-rastreio.ts. Os pedidos antigos (up1 = página, up2 = estilo, um
+   downsell só) já foram todos registrados com os nomes de antes. */
 export const COLUNA_RASTREIO = {
   front: "rastreado",
-  up1:   "up1_rastreado",
-  up2:   "up2_rastreado",
+  up1:   "video",
+  ds1:   "video",
+  up2:   "up1_rastreado",
+  ds2:   "up1_rastreado",
+  up3:   "up2_rastreado",
+  ds3:   "up2_rastreado",
+  ds4:   "combo",
   ds:    "ds_rastreado",
-  ds1:   "ds_rastreado",
-  ds2:   "ds_rastreado",
-  ds3:   "ds_rastreado",
 } as const;
 
 export type OfertaRastreio = keyof typeof COLUNA_RASTREIO;

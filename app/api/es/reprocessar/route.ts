@@ -16,6 +16,8 @@ import { ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
  *   etapa   travado quando                                   espera    limite
  *   musica  pago e sem música (inclusive erro de geração)    30 min    2 (gasta Suno)
  *   envio   música pronta e e-mail não saiu                   30 min    3
+ *   smtp    as 3 do envio falharam: manda 1 vez pelo e-mail   30 min    1
+ *           de suporte (SMTP, fluxo "ES - Envio SMTP")
  *   pagina  comprou a página, música pronta, não entregue     30 min    3
  *   estilo  comprou o estilo, música 1 pronta, estilo não     30 min    2 (gasta Suno)
  *           gerado nem entregue (inclusive erro de geração)
@@ -34,6 +36,8 @@ import { ESPERA_FOTOS_MIN } from "@/lib/es-ofertas";
 const ETAPAS = {
   musica: { espera: 30, limite: 2, coluna: "reprocesso_musica" },
   envio:  { espera: 30, limite: 3, coluna: "reprocesso_envio" },
+  // Mesma coluna do envio: pega quem parou em 3 e leva pra 4 (uma vez só)
+  smtp:   { espera: 30, limite: 4, coluna: "reprocesso_envio" },
   pagina: { espera: 30, limite: 3, coluna: "reprocesso_pagina" },
   video:  { espera: 0,  limite: 3, coluna: "reprocesso_video" },
   estilo: { espera: 30, limite: 2, coluna: "up_tentativa_geracao" },
@@ -76,6 +80,7 @@ async function chamarN8n(env: string, corpo: Record<string, unknown>): Promise<s
 const DISPARO: Record<Etapa, (id: string) => Promise<string>> = {
   musica: (id) => chamarN8n("ES_N8N_WEBHOOK_URL", { pedido_id: id, payment_id: id, tipo: "principal" }),
   envio:  (id) => chamarN8n("ES_N8N_ENVIO_WEBHOOK_URL", { pedido_id: id, payment_id: id, tipo: "envio" }),
+  smtp:   (id) => chamarN8n("ES_N8N_ENVIO_SMTP_WEBHOOK_URL", { pedido_id: id, payment_id: id, tipo: "envio_smtp" }),
   pagina: (id) => dispararPaginaEs(id),
   video:  (id) => refazerVideoEs(id),
   estilo: (id) => dispararEstiloEs(id, true),
@@ -91,6 +96,7 @@ function ondeTravado(etapa: Etapa) {
   const regra =
     etapa === "musica" ? { status: "pago", link_audio: null, gerou_musica: false }
     : etapa === "envio" ? { status: "pago", link_audio: { not: null }, entrega_email: false }
+    : etapa === "smtp" ? { status: "pago", link_audio: { not: null }, entrega_email: false, reprocesso_envio: ETAPAS.envio.limite }
     : etapa === "pagina" ? { AND: [FILTROS_ES.pagina_pendente()], link_pagina: { not: null } }
     // atualizado_em: o music_ready (que dispara o estilo) mexe na linha — sem
     // isto, um estilo disparado há 2 min seria disparado de novo (Suno em dobro)
@@ -133,7 +139,7 @@ export async function POST(req: NextRequest) {
   // Quem esgotou as tentativas: fica pra resolver na mão (aparece na visão geral)
   const [mus, env, pag, vid, est] = await Promise.all([
     prisma.pedidoEs.count({ where: { status: "pago", link_audio: null, gerou_musica: false, reprocesso_musica: { gte: ETAPAS.musica.limite } } }),
-    prisma.pedidoEs.count({ where: { status: "pago", link_audio: { not: null }, entrega_email: false, reprocesso_envio: { gte: ETAPAS.envio.limite } } }),
+    prisma.pedidoEs.count({ where: { status: "pago", link_audio: { not: null }, entrega_email: false, reprocesso_envio: { gte: ETAPAS.smtp.limite } } }),
     prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.pagina_pendente()], reprocesso_pagina: { gte: ETAPAS.pagina.limite } } as any }),
     prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.video_erro()], reprocesso_video: { gte: ETAPAS.video.limite } } as any }),
     prisma.pedidoEs.count({ where: { AND: [FILTROS_ES.estilo()], status: "pago", up_gerou_musica: false, up_entrega_email: false, up_tentativa_geracao: { gte: ETAPAS.estilo.limite } } as any }),
