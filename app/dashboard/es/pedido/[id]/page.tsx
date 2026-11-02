@@ -187,7 +187,7 @@ export default function PedidoEsPage() {
     try {
       const res = await fetch(`/api/es/pedido/${id}/capa`, { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Erro ao trocar a capa");
+      if (!res.ok) throw new Error(data.error || `Erro ao trocar a capa (HTTP ${res.status})`);
       mostrarToast("ok", "Capa trocada! A página já mostra a foto nova.");
     } catch (e: any) {
       mostrarToast("erro", e.message || "Erro ao trocar a capa.");

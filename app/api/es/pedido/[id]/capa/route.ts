@@ -16,7 +16,16 @@ const SUPA = (process.env.SUPABASE_PUBLIC_URL || "https://baltzukuszagxcgkfrpi.s
 const TIPOS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const MAX = 5 * 1024 * 1024;
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    return await trocar(req, ctx);
+  } catch (e: any) {
+    console.error("[capa-es] erro:", e?.message);
+    return NextResponse.json({ error: `Erro no servidor: ${e?.message ?? "desconhecido"}` }, { status: 500 });
+  }
+}
+
+async function trocar(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if ((session?.user as any)?.role !== "ADMIN") return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
@@ -31,7 +40,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const form = await req.formData().catch(() => null);
   const foto = form?.get("foto");
-  if (!(foto instanceof File)) return NextResponse.json({ error: "Envie a foto no campo 'foto'" }, { status: 400 });
+  if (!foto || typeof foto === "string" || typeof (foto as Blob).arrayBuffer !== "function") {
+    return NextResponse.json({ error: "Envie a foto no campo 'foto'" }, { status: 400 });
+  }
   const ext = TIPOS[foto.type];
   if (!ext) return NextResponse.json({ error: "Use JPG, PNG ou WEBP" }, { status: 400 });
   if (foto.size > MAX) return NextResponse.json({ error: "Foto maior que 5 MB" }, { status: 400 });
