@@ -81,7 +81,7 @@ interface PedidoEs {
     cartoon?: boolean; lookalike?: boolean;   // vídeo com letra (Order 1) / + fotos (Plus)
   } | null;
   /* funil de 2026-10-30: por qual oferta (up1…ds4) cada produto entrou; null = funil antigo */
-  ofertas_novas?: { video: string | null; pagina: string | null; estilo: string | null } | null;
+  ofertas_novas?: { novo: boolean; video: string | null; pagina: string | null; estilo: string | null } | null;
   bump1?: string | null; bump1_valor?: string | null;   // order bump 1 (vídeo com letra, Plus = + fotos)
   bump2?: string | null; bump2_valor?: string | null;   // order bump 2 (livre)
 }
@@ -177,6 +177,20 @@ export default function PedidoEsPage() {
       mostrarToast("erro", "Erro ao salvar a letra.");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // Troca a capa da página da música 1 (Supabase: Storage + presentes.cover_url)
+  async function trocarCapa(foto: File) {
+    const fd = new FormData();
+    fd.append("foto", foto);
+    try {
+      const res = await fetch(`/api/es/pedido/${id}/capa`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Erro ao trocar a capa");
+      mostrarToast("ok", "Capa trocada! A página já mostra a foto nova.");
+    } catch (e: any) {
+      mostrarToast("erro", e.message || "Erro ao trocar a capa.");
     }
   }
 
@@ -283,12 +297,13 @@ export default function PedidoEsPage() {
             {pedido.ofertas_novas ? (() => {
               /* Funil de 2026-10-30: um quadro por PRODUTO, com a oferta pela qual entrou */
               const o = pedido.ofertas_novas;
-              const rot = (of: string | null) => of ? of.toUpperCase() : "não comprado";
+              /* funil anterior: up1 = página, up2 = estilo, um downsell só */
+              const rot = (of: string | null) => of ? of.toUpperCase() + (o.novo ? "" : " (funil anterior)") : "não comprado";
               const temVideoLetra = !!pedido.bump1 && pedido.bump1.includes("video");
               return (<>
-                <OfertaBox titulo="Vídeo com letra" descricao={o.video ? `Comprado no ${rot(o.video)}` : "up1 · ds1 · ds4"} status={temVideoLetra ? "pago" : null} valor={usd(pedido.bump1_valor)} rastreado={isAdmin ? pedido.video?.rastreado : undefined} />
-                <OfertaBox titulo="Página Premium" descricao={o.pagina ? `Comprada no ${rot(o.pagina)}` : "up2 · ds2 · ds4"} status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
-                <OfertaBox titulo="Estilo extra" descricao={o.estilo ? `${pedido.estilo2 ?? "Estilo"} · ${rot(o.estilo)}` : "up3 · ds3 · ds4"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
+                <OfertaBox titulo="Vídeo com letra" descricao={o.video ? `Comprado no ${rot(o.video)}` : o.novo ? "up1 · ds1 · ds4" : "não comprado"} status={temVideoLetra ? "pago" : null} valor={usd(pedido.bump1_valor)} rastreado={isAdmin ? pedido.video?.rastreado : undefined} />
+                <OfertaBox titulo="Página Premium" descricao={o.pagina ? `Comprada no ${rot(o.pagina)}` : o.novo ? "up2 · ds2 · ds4" : "up1 · ds (funil anterior)"} status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
+                <OfertaBox titulo="Estilo extra" descricao={o.estilo ? `${pedido.estilo2 ?? "Estilo"} · ${rot(o.estilo)}` : o.novo ? "up3 · ds3 · ds4" : "up2 · ds (funil anterior)"} status={pedido.up2_status} valor={usd(pedido.up2_valor)} rastreado={isAdmin ? pedido.up2_rastreado : undefined} />
               </>);
             })() : (<>
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />
@@ -441,6 +456,7 @@ export default function PedidoEsPage() {
           linkBasica={pedido.link_basica}
           linkAudio={pedido.link_audio}
           linkMp4={pedido.link_mp4}
+          onTrocarCapa={isAdmin && (pedido.link_pagina || pedido.link_basica) ? trocarCapa : undefined}
         />
 
         {temEstilo && (
@@ -722,7 +738,7 @@ function OfertaBox({
 }
 
 function Musica({
-  titulo, nomeArquivo, songId, linkPagina, linkBasica, linkAudio, linkMp4,
+  titulo, nomeArquivo, songId, linkPagina, linkBasica, linkAudio, linkMp4, onTrocarCapa,
 }: {
   titulo: string;
   nomeArquivo: string;
@@ -731,7 +747,9 @@ function Musica({
   linkBasica?: string;
   linkAudio?: string;
   linkMp4?: string;
+  onTrocarCapa?: (foto: File) => Promise<void>;
 }) {
+  const [trocando, setTrocando] = useState(false);
   const temAlgo = songId || linkPagina || linkBasica || linkAudio || linkMp4;
   if (!temAlgo) {
     return (
@@ -760,6 +778,24 @@ function Musica({
           </a>
         )}
         {linkMp4 && <LinkBtn href={linkMp4} label="🎬 MP4" />}
+        {onTrocarCapa && (
+          <label className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium ${trocando ? "opacity-50 pointer-events-none" : "cursor-pointer"}`}>
+            {trocando ? "Enviando..." : "🖼️ Trocar capa"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f || !confirm("Trocar a capa da página desta música por esta foto?")) return;
+                setTrocando(true);
+                await onTrocarCapa(f);
+                setTrocando(false);
+              }}
+            />
+          </label>
+        )}
       </div>
     </section>
   );

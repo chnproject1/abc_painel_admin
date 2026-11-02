@@ -42,19 +42,39 @@ export function funilNovoEs(o: { upsell?: string | null; upsell_erro?: string | 
   return [...listaUpsell(o.upsell), String(o.upsell_erro ?? "").split(":")[0].replace(/-teste$/, "")].some(ehProdutoNovo);
 }
 
-/** Funil novo: por qual oferta cada produto entrou (null = não comprou). */
-export function ofertasPorProduto(o: { upsell?: string | null }) {
-  const comprados = listaUpsell(o.upsell).filter(ehProdutoNovo);
-  const de = (...ps: ProdutoNovo[]) => {
-    const p = comprados.find((x) => ps.includes(x));
-    return p ? OFERTA_DO_PRODUTO[p] : null;
-  };
+/** Por qual oferta cada produto entrou (null = não comprou). Funil novo: pelos
+    nomes de OFERTA_DO_PRODUTO. Funil anterior (up1 página · up2 estilo · um ds ·
+    vídeo como order bump ou `ob1`): pelos status e pelo nome do downsell. */
+export function ofertasPorProduto(o: OfertasEs) {
+  if (funilNovoEs(o)) {
+    const comprados = listaUpsell(o.upsell).filter(ehProdutoNovo);
+    const de = (...ps: ProdutoNovo[]) => {
+      const p = comprados.find((x) => ps.includes(x));
+      return p ? OFERTA_DO_PRODUTO[p] : null;
+    };
+    return {
+      novo: true,
+      video:  de("video_up", "video_ds", "combo4"),
+      pagina: de("pagina_up", "pagina_ds", "combo4"),
+      estilo: de("estilo_up", "estilo_ds", "combo4"),
+    };
+  }
+  const ds = o.ds_status === "pago" ? dsTipoDe(o) : null;
+  const lib = liberacoes(o);
   return {
-    video:  de("video_up", "video_ds", "combo4"),
-    pagina: de("pagina_up", "pagina_ds", "combo4"),
-    estilo: de("estilo_up", "estilo_ds", "combo4"),
+    novo: false,
+    video:  bumpTem(o, "video") ? (listaUpsell(o.upsell).includes("ob1") ? "ob1" : "order bump") : null,
+    pagina: o.up1_status === "pago" ? "up1" : lib.pagina ? ds : null,
+    estilo: o.up2_status === "pago" && o.estilo2 ? "up2" : lib.estilo ? ds : null,
   };
 }
+
+/* Rastreio no funil ANTERIOR: up1 = página, up2 = estilo, um downsell só. */
+export const COLUNA_RASTREIO_ANTERIOR: Record<string, string> = {
+  front: "rastreado", up1: "up1_rastreado", up2: "up2_rastreado",
+  ds: "ds_rastreado", ds1: "ds_rastreado", ds2: "ds_rastreado", ds3: "ds_rastreado",
+  ob1: "video",
+};
 
 export type StatusOferta = string | null | undefined;
 
@@ -177,6 +197,7 @@ export const COLUNA_RASTREIO = {
   ds3:   "up2_rastreado",
   ds4:   "combo",
   ds:    "ds_rastreado",
+  ob1:   "video",
 } as const;
 
 export type OfertaRastreio = keyof typeof COLUNA_RASTREIO;

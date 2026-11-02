@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { selectPorRoleUs } from "@/lib/columns";
 import { linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video";
 import { ehCartoon } from "@/lib/video-es-producao";
-import { funilNovoEs, ofertasPorProduto } from "@/lib/es-ofertas";
+import { ofertasPorProduto, liberacoes } from "@/lib/es-ofertas";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -34,10 +34,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // vídeo cartoon (order bump) ou vídeo com fotos (funil antigo)
     cartoon: ehCartoon(v.opcoes), lookalike: ehCartoon(v.opcoes) && !!(v.opcoes as any).lookalike,
   } : null;
-  /* Funil de 2026-10-30: por qual oferta (up1…ds4) cada produto entrou. Calculado
-     aqui porque a lista bruta (`upsell`) só vai pro admin. */
-  const bruto = await prisma.pedidoEs.findUnique({ where: { id }, select: { upsell: true, upsell_erro: true } });
-  const ofertas_novas = bruto && funilNovoEs(bruto) ? ofertasPorProduto(bruto) : null;
+  /* Por qual oferta (up1…ds4) cada produto entrou — funil novo e anterior.
+     Calculado aqui porque a lista bruta (`upsell`) só vai pro admin. */
+  const bruto = await prisma.pedidoEs.findUnique({ where: { id }, select: {
+    status: true, up1_status: true, up2_status: true, ds_status: true, estilo2: true,
+    bump1: true, bump2: true, upsell: true, upsell_erro: true } });
+  /* Produtos que não existem mais (vídeo com fotos, "músicas 2 e 3" dos EUA)
+     não cabem nos 3 quadros: esses pedidos ficam com o quadro antigo. */
+  const legado = bruto && (liberacoes(bruto).video || /(^|,)versoes(,|$)/.test(bruto.upsell ?? ""));
+  const ofertas_novas = bruto && !legado ? ofertasPorProduto(bruto) : null;
   return NextResponse.json({ ...pedido, video, ofertas_novas });
 }
 

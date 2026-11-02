@@ -34,6 +34,39 @@ const ACOES = [
   "recuperacao_entregue", "recuperacao_erro",
 ];
 
+/* Pedido silver (entrega em 30 min) com erro no envio da música: manda na hora
+   pelo e-mail de suporte (fluxo n8n "ES - Envio SMTP", o mesmo do reprocessamento).
+   reprocesso_envio = 4 é a marca "já enviado pelo e-mail de suporte" (ver ETAPAS
+   em /api/es/reprocessar): o pedido sai das tentativas de 30 em 30 min. Se o n8n
+   não responder, não marca nada e o reprocessamento normal segue. Se o envio pelo
+   e-mail de suporte falhar, o próprio fluxo manda o alerta (URGENTE) por e-mail. */
+const ENVIADO_PELO_SUPORTE = 4;
+async function enviarPeloSuporteSilver(id: string): Promise<string | undefined> {
+  const p = await prisma.pedidoEs.findUnique({
+    where: { id },
+    select: { plano: true, status: true, entrega_email: true, reprocesso_envio: true },
+  });
+  if (!p || p.status !== "pago" || p.entrega_email || !String(p.plano ?? "").startsWith("silver")) return undefined;
+  if ((p.reprocesso_envio ?? 0) >= ENVIADO_PELO_SUPORTE) return "ja_enviado_pelo_suporte";
+  const url = process.env.ES_N8N_ENVIO_SMTP_WEBHOOK_URL || process.env.US_N8N_ENVIO_SMTP_WEBHOOK_URL;
+  if (!url) return "sem_url";
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: id, payment_id: id, tipo: "envio_smtp", prioridade: "30min" }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return `n8n_${r.status}`;
+    await prisma.pedidoEs.update({ where: { id }, data: { reprocesso_envio: ENVIADO_PELO_SUPORTE, reprocesso_em: new Date() } });
+    console.log("[es/n8n] silver com erro no envio: enviado pelo e-mail de suporte", id);
+    return "disparado";
+  } catch (e: any) {
+    console.error("[es/n8n] falha ao chamar o envio pelo e-mail de suporte:", id, e?.message);
+    return "erro";
+  }
+}
+
 function autorizado(req: NextRequest): boolean {
   const secret = process.env.ES_N8N_SECRET || process.env.ES_CHECKOUT_SECRET || process.env.US_N8N_SECRET || process.env.US_CHECKOUT_SECRET;
   if (!secret) return true; // sem segredo configurado, rota aberta
@@ -357,10 +390,15 @@ export async function POST(req: NextRequest) {
       if (lib.estilo && !regenerada) estilo_disparo = await dispararEstiloEs(id);
     }
 
+    /* Silver (entrega em 30 min): erro no envio → envio pelo e-mail de suporte NA
+       HORA, sem esperar as 3 tentativas de 30 em 30 min do reprocessamento. */
+    const suporte_disparo = action === "email_erro" ? await enviarPeloSuporteSilver(id) : undefined;
+
     return NextResponse.json({
       success: true, message: mensagem, pedido, entrega_pagina: lib.pagina, entrega_video: lib.video, entrega_estilo: lib.estilo,
       ...(video_disparo ? { video_disparo } : {}), ...(pagina_disparo ? { pagina_disparo } : {}),
       ...(estilo_disparo ? { estilo_disparo } : {}),
+      ...(suporte_disparo ? { suporte_disparo } : {}),
     });
   } catch (e: any) {
     if (e?.code === "P2025") {
