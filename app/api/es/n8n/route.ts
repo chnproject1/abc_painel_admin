@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
      geração ou uma REGENERAÇÃO (link_audio diferente). Na regeneração a página
      Premium ganha link novo e o vídeo precisa ser refeito com o MP3 novo. */
   const antes = action === "music_ready"
-    ? await prisma.pedidoEs.findUnique({ where: { id }, select: { link_audio: true } })
+    ? await prisma.pedidoEs.findUnique({ where: { id }, select: { link_audio: true, song_id: true } })
     : null;
 
   switch (action) {
@@ -381,7 +381,9 @@ export async function POST(req: NextRequest) {
     let estilo_disparo: string | undefined;
     if (action === "music_ready") {
       const novo = txt(data.link_audio);
-      const regenerada = Boolean(antes?.link_audio && novo && novo !== antes.link_audio);
+      const song = txt(data.song_id);
+      // a música refeita sobrescreve o mesmo MP3 (link igual): o song_id novo é o que denuncia a troca
+      const regenerada = Boolean(antes?.link_audio && novo && (novo !== antes.link_audio || (song && song !== antes.song_id)));
       // vídeo de fotos (funil antigo) ou vídeo cartoon (bump) — os dois só da música PRINCIPAL;
       // o up_music_ready (música do estilo extra) nunca dispara vídeo
       if (lib.video || lib.video_cartoon) video_disparo = regenerada ? await refazerVideoEs(id) : await dispararProducaoVideoEs(id);
