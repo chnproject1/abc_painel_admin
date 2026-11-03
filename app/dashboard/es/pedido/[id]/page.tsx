@@ -307,9 +307,9 @@ export default function PedidoEsPage() {
               const peloDs = (of: string | null) => !o.novo && !!of && of.startsWith("ds");
               const paginaDs = peloDs(o.pagina), estiloDs = peloDs(o.estilo);
               return (<>
-                <OfertaBox titulo="Vídeo com letra" descricao={o.video ? `Comprado no ${rot(o.video)}` : o.novo ? "up1 · ds1 · ds4" : "não comprado"} status={temVideoLetra ? "pago" : null} valor={usd(pedido.bump1_valor)} rastreado={isAdmin ? pedido.video?.rastreado : undefined} />
-                <OfertaBox titulo="Página Premium" descricao={o.pagina ? `Comprada no ${rot(o.pagina)}` : o.novo ? "up2 · ds2 · ds4" : "up1 · ds (funil anterior)"} status={paginaDs ? pedido.ds_status : pedido.up1_status} valor={usd(paginaDs ? pedido.ds_valor : pedido.up1_valor)} rastreado={isAdmin ? (paginaDs ? pedido.ds_rastreado : pedido.up1_rastreado) : undefined} />
-                <OfertaBox titulo="Estilo extra" descricao={o.estilo ? `${pedido.estilo2 ?? "Estilo"} · ${rot(o.estilo)}` : o.novo ? "up3 · ds3 · ds4" : "up2 · ds (funil anterior)"} status={estiloDs ? pedido.ds_status : pedido.up2_status} valor={usd(estiloDs ? pedido.ds_valor : pedido.up2_valor)} rastreado={isAdmin ? (estiloDs ? pedido.ds_rastreado : pedido.up2_rastreado) : undefined} />
+                <OfertaBox titulo="Página Premium" descricao={o.pagina ? `Comprada no ${rot(o.pagina)}` : o.novo ? "up1 · ds1 · ds4" : "up1 · ds (funil anterior)"} status={paginaDs ? pedido.ds_status : pedido.up1_status} valor={usd(paginaDs ? pedido.ds_valor : pedido.up1_valor)} rastreado={isAdmin ? (paginaDs ? pedido.ds_rastreado : pedido.up1_rastreado) : undefined} />
+                <OfertaBox titulo="Estilo extra" descricao={o.estilo ? `${pedido.estilo2 ?? "Estilo"} · ${rot(o.estilo)}` : o.novo ? "up2 · ds2 · ds4" : "up2 · ds (funil anterior)"} status={estiloDs ? pedido.ds_status : pedido.up2_status} valor={usd(estiloDs ? pedido.ds_valor : pedido.up2_valor)} rastreado={isAdmin ? (estiloDs ? pedido.ds_rastreado : pedido.up2_rastreado) : undefined} />
+                <OfertaBox titulo="Vídeo com letra" descricao={o.video ? `Comprado no ${rot(o.video)}` : o.novo ? "up3 · ds3 · ds4" : "não comprado"} status={temVideoLetra ? "pago" : null} valor={usd(pedido.bump1_valor)} rastreado={isAdmin ? pedido.video?.rastreado : undefined} />
               </>);
             })() : (<>
             <OfertaBox titulo="Upsell 1"      descricao="Página Premium"  status={pedido.up1_status} valor={usd(pedido.up1_valor)} rastreado={isAdmin ? pedido.up1_rastreado : undefined} />

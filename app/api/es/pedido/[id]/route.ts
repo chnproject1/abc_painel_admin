@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
      Calculado aqui porque a lista bruta (`upsell`) só vai pro admin. */
   const bruto = await prisma.pedidoEs.findUnique({ where: { id }, select: {
     status: true, up1_status: true, up2_status: true, ds_status: true, estilo2: true,
-    bump1: true, bump2: true, upsell: true, upsell_erro: true } });
+    bump1: true, bump2: true, upsell: true, upsell_erro: true, criado_em: true } });
   /* Produtos que não existem mais (vídeo com fotos, "músicas 2 e 3" dos EUA)
      não cabem nos 3 quadros: esses pedidos ficam com o quadro antigo. */
   const legado = bruto && (liberacoes(bruto).video || /(^|,)versoes(,|$)/.test(bruto.upsell ?? ""));

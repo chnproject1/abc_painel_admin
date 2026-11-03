@@ -20,20 +20,33 @@
 */
 
 /* ── Funil de 2026-10-30 (QUIZ ES V2 e recuperação) ─────────────────────
-   up1 vídeo com letra → ds1 · up2 página → ds2 · up3 estilo → ds3 · ds4 os três
-   (só pra quem não comprou nenhum). Cada compra entra em `upsell` com um NOME
+   Desde 2026-11-03: up1 página → ds1 · up2 estilo → ds2 · up3 vídeo com letra
+   → ds3 · ds4 os três (só pra quem não comprou nenhum). De 30/10 a 03/11 o
+   vídeo era o up1 (ver OFERTA_DO_PRODUTO_3010). Cada compra entra em `upsell` com um NOME
    PRÓPRIO (abaixo), que não colide com os nomes antigos — assim o pedido novo é
    reconhecido e nada é deduzido: o que foi comprado é o que é entregue.
    No painel o registro é por PRODUTO: vídeo → bump1 ('video') · página →
    up1_status/up1_valor · estilo → up2_status/up2_valor (+ estilo2). O
    ds_status fica só pros pedidos antigos. */
 export const OFERTA_DO_PRODUTO = {
+  pagina_up: "up1", pagina_ds: "ds1",
+  estilo_up: "up2", estilo_ds: "ds2",
+  video_up: "up3", video_ds: "ds3",
+  combo4: "ds4",
+} as const;
+export type ProdutoNovo = keyof typeof OFERTA_DO_PRODUTO;
+
+/* Pedidos criados antes disto foram vendidos na ordem de 30/10 (up1 vídeo ·
+   up2 página · up3 estilo): os rótulos deles seguem o mapa abaixo. */
+export const FUNIL_ES_0311_DESDE = new Date("2026-11-03T17:40:00Z");   // 14h40 de Brasília: subida dos sites
+const OFERTA_DO_PRODUTO_3010: Record<ProdutoNovo, string> = {
   video_up: "up1", video_ds: "ds1",
   pagina_up: "up2", pagina_ds: "ds2",
   estilo_up: "up3", estilo_ds: "ds3",
   combo4: "ds4",
-} as const;
-export type ProdutoNovo = keyof typeof OFERTA_DO_PRODUTO;
+};
+export const ordem3010 = (o: { criado_em?: Date | string | null }) =>
+  !!o.criado_em && new Date(o.criado_em) < FUNIL_ES_0311_DESDE;
 const ehProdutoNovo = (p: string): p is ProdutoNovo => p in OFERTA_DO_PRODUTO;
 const listaUpsell = (v?: string | null) => String(v ?? "").split(",").map((x) => x.trim().replace(/-teste$/, "")).filter(Boolean);
 
@@ -48,9 +61,10 @@ export function funilNovoEs(o: { upsell?: string | null; upsell_erro?: string | 
 export function ofertasPorProduto(o: OfertasEs) {
   if (funilNovoEs(o)) {
     const comprados = listaUpsell(o.upsell).filter(ehProdutoNovo);
+    const mapa: Record<ProdutoNovo, string> = ordem3010(o) ? OFERTA_DO_PRODUTO_3010 : OFERTA_DO_PRODUTO;
     const de = (...ps: ProdutoNovo[]) => {
       const p = comprados.find((x) => ps.includes(x));
-      return p ? OFERTA_DO_PRODUTO[p] : null;
+      return p ? mapa[p] : null;
     };
     return {
       novo: true,
@@ -88,6 +102,7 @@ export type OfertasEs = {
   bump2?: string | null;           // order bump 2 do checkout (livre, próximo produto)
   upsell?: string | null;          // produtos pagos (funil de 2026-10-30: nomes de OFERTA_DO_PRODUTO)
   upsell_erro?: string | null;
+  criado_em?: Date | string | null;  // separa a ordem de 30/10 da de 03/11 (ordem3010)
 };
 
 /* Order 1 = vídeo com a letra animada + até 15 fotos na moldura ("video"; os pedidos
@@ -182,23 +197,32 @@ export const WHERE_PAGINA_LIBERADA = {
    Cada oferta é um pedido próprio na UTMify (<id>, <id>_up1, _up2, _ds1…) e
    tem o próprio campo "já registrado". O fluxo de rastreio marca com
    { action: "rastreado", oferta } — os nomes são os que o rastreio-api usa. */
-/* Funil de 2026-10-30: o rótulo diz o PRODUTO. up1/ds1 = vídeo (marca no
-   PedidoVideoEs), up2/ds2 = página (up1_rastreado), up3/ds3 = estilo
-   (up2_rastreado), ds4 = os três. "video" e "combo" são tratados em
+/* Funil de 2026-10-30, ordem de 03/11: o rótulo diz o PRODUTO. up1/ds1 =
+   página (up1_rastreado), up2/ds2 = estilo (up2_rastreado), up3/ds3 = vídeo
+   (marca no PedidoVideoEs), ds4 = os três. "video" e "combo" são tratados em
    lib/es-rastreio.ts. Os pedidos antigos (up1 = página, up2 = estilo, um
    downsell só) já foram todos registrados com os nomes de antes. */
 export const COLUNA_RASTREIO = {
   front: "rastreado",
-  up1:   "video",
-  ds1:   "video",
-  up2:   "up1_rastreado",
-  ds2:   "up1_rastreado",
-  up3:   "up2_rastreado",
-  ds3:   "up2_rastreado",
+  up1:   "up1_rastreado",
+  ds1:   "up1_rastreado",
+  up2:   "up2_rastreado",
+  ds2:   "up2_rastreado",
+  up3:   "video",
+  ds3:   "video",
   ds4:   "combo",
   ds:    "ds_rastreado",
   ob1:   "video",
 } as const;
+
+/* A mesma coisa na ordem de 30/10 (up1/ds1 vídeo · up2/ds2 página · up3/ds3 estilo). */
+export const COLUNA_RASTREIO_3010: Record<string, string> = {
+  front: "rastreado",
+  up1: "video", ds1: "video",
+  up2: "up1_rastreado", ds2: "up1_rastreado",
+  up3: "up2_rastreado", ds3: "up2_rastreado",
+  ds4: "combo", ds: "ds_rastreado", ob1: "video",
+};
 
 export type OfertaRastreio = keyof typeof COLUNA_RASTREIO;
 

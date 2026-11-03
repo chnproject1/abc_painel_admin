@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { COLUNA_RASTREIO, COLUNA_RASTREIO_ANTERIOR, funilNovoEs } from "@/lib/es-ofertas";
+import { COLUNA_RASTREIO, COLUNA_RASTREIO_3010, COLUNA_RASTREIO_ANTERIOR, funilNovoEs, ordem3010 } from "@/lib/es-ofertas";
 
 /**
  * Marca (ou desmarca) o rastreio de UMA oferta do pedido. Usado pela ação
@@ -8,15 +8,16 @@ import { COLUNA_RASTREIO, COLUNA_RASTREIO_ANTERIOR, funilNovoEs } from "@/lib/es
  * pro card "Vídeo: sem rastreio". Reenviar é inofensivo: devolve ja_estava.
  */
 export async function marcarRastreio(id: string, oferta: string, valor: boolean) {
-  /* O mesmo rótulo muda de produto entre os funis (up1 = página no anterior, vídeo
-     no de 2026-10-30): a coluna sai do formato DESTE pedido. */
-  const formato = await prisma.pedidoEs.findUnique({ where: { id }, select: { upsell: true, upsell_erro: true } });
-  const mapa: Record<string, string> = formato && !funilNovoEs(formato) ? COLUNA_RASTREIO_ANTERIOR : COLUNA_RASTREIO;
+  /* O mesmo rótulo muda de produto entre os funis (up1 = página no anterior e
+     desde 03/11, vídeo de 30/10 a 03/11): a coluna sai do formato DESTE pedido. */
+  const formato = await prisma.pedidoEs.findUnique({ where: { id }, select: { upsell: true, upsell_erro: true, criado_em: true } });
+  const mapa: Record<string, string> = formato && !funilNovoEs(formato) ? COLUNA_RASTREIO_ANTERIOR
+    : formato && ordem3010(formato) ? COLUNA_RASTREIO_3010 : COLUNA_RASTREIO;
   const coluna = mapa[oferta];
   if (!coluna) {
     return { success: false, error: `oferta desconhecida: ${oferta}. Válidas: ${Object.keys(COLUNA_RASTREIO).join(", ")}` };
   }
-  /* Funil de 2026-10-30: vídeo (up1/ds1) marca no PedidoVideoEs; ds4 (os três)
+  /* Funil de 2026-10-30: vídeo (up3/ds3; up1/ds1 de 30/10 a 03/11) marca no PedidoVideoEs; ds4 (os três)
      marca página, estilo e vídeo de uma vez. */
   if (coluna === "video" || coluna === "combo") {
     const existe = await prisma.pedidoEs.findUnique({ where: { id }, select: { id: true, video: { select: { pedido_id: true } } } });
