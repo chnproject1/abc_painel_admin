@@ -7,7 +7,7 @@ import { avisarVideoLiberadoEs, dispararEstiloEs, dispararCartoonEs, ehCartoon }
 /**
  * Aciona os fluxos n8n da operação ES (LATAM) a partir do painel.
  *
- *   POST /api/es/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio" | "video" | "confirmacao_video" }
+ *   POST /api/es/trigger/<id>   body: { "tipo": "principal" | "upsell" | "envio" | "envio_smtp" | "video" | "confirmacao_video" }
  *
  * Uma rota só, com o fluxo escolhido pelo `tipo`, porque as três fazem a mesma
  * coisa: confere que o pedido existe em PedidoEs e repassa o id ao webhook.
@@ -38,6 +38,11 @@ const FLUXOS = {
   envio: {
     env: "ES_N8N_ENVIO_WEBHOOK_URL",
     corpo: (id: string) => ({ payment_id: id, pedido_id: id, tipo: "envio" }),
+  },
+  // Mesmo reenvio geral, pelo e-mail de suporte (SMTP, fluxo "ES - Envio SMTP")
+  envio_smtp: {
+    env: "ES_N8N_ENVIO_SMTP_WEBHOOK_URL",
+    corpo: (id: string) => ({ payment_id: id, pedido_id: id, tipo: "envio_smtp" }),
   },
   // Vídeo (upsell 2): manda pra produção de novo com as fotos que já estão lá
   video: {

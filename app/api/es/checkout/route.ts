@@ -4,6 +4,7 @@ import { gerarToken, linkFotosEs, linkVerVideoEs, urlPublica } from "@/lib/video
 import { liberacoes, dsFoiOfertado, montarPlanoEs, dsTipoDe, OFERTA_DO_PRODUTO, funilNovoEs } from "@/lib/es-ofertas";
 import { avisarVideoLiberadoEs, dispararPaginaEs, dispararEstiloEs, garantirVideoCartoonEs, ehCartoon } from "@/lib/video-es-producao";
 import { marcarRastreio } from "@/lib/es-rastreio";
+import { corrigirEmail } from "@/lib/email-corrigir";
 
 /**
  * Entrada de pedidos da operação ES (LATAM) (model PedidoEs).
@@ -315,6 +316,7 @@ export async function GET(req: NextRequest) {
       link_mp4:     p.link_mp4,
       data_entrega: p.data_entrega,
       entrega_email: p.entrega_email,
+      pagina_entrega_email: p.pagina_entrega_email,
 
       // Produção — música 2 (estilo extra; nos pedidos antigos do US, músicas 2 e 3)
       up_gerou_musica: p.up_gerou_musica,
@@ -382,7 +384,7 @@ export async function POST(req: NextRequest) {
 
     const base = {
       nome:         data.name        || "",
-      email:        data.mail        || data.email || "",
+      email:        corrigirEmail(data.mail || data.email),
       nomefiscal:   data.nomefiscal  || null,
       zip_code:     data.zip_code    || null,
       idioma:       data.idioma      || "es",
@@ -478,7 +480,7 @@ export async function POST(req: NextRequest) {
       if (chave === "phone" || chave === "cpf" || chave === "currency") continue;
 
       const coluna = MAPA_FUNIL[chave];
-      if (coluna) merge[coluna] = String(valor);
+      if (coluna) merge[coluna] = coluna === "email" ? corrigirEmail(valor) : String(valor);
       else ignorados.push(chave);
     }
 

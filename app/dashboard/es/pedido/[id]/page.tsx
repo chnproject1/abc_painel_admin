@@ -206,7 +206,7 @@ export default function PedidoEsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao acionar");
-      mostrarToast("ok", tipo === "envio" || tipo === "confirmacao_video" ? "Enviado ao cliente." : "Enviado para produção.");
+      mostrarToast("ok", tipo === "envio" || tipo === "envio_smtp" || tipo === "confirmacao_video" ? "Enviado ao cliente." : "Enviado para produção.");
     } catch (e: any) {
       mostrarToast("erro", e.message || "Erro ao acionar o fluxo.");
     } finally {
@@ -533,12 +533,21 @@ export default function PedidoEsPage() {
         {/* Ações — mesmo formato do BR, com um "gerar e enviar" a mais */}
         <section className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
           <Acao
-            titulo="Enviar ao cliente"
+            titulo="Enviar ao cliente (Resend)"
             descricao="Envia por e-mail tudo o que já foi gerado — música principal, extras e páginas conforme o que ele comprou."
             rotulo={acionando === "envio" ? "Enviando..." : "Enviar"}
             cor="bg-blue-600 hover:bg-blue-700"
             disabled={!!acionando}
             onClick={() => acionar("envio")}
+          />
+
+          <Acao
+            titulo="Enviar pelo e-mail de suporte"
+            descricao="O mesmo envio geral, pelo e-mail de suporte (SMTP). Use quando o Resend der erro."
+            rotulo={acionando === "envio_smtp" ? "Enviando..." : "Enviar"}
+            cor="bg-blue-600 hover:bg-blue-700"
+            disabled={!!acionando}
+            onClick={() => acionar("envio_smtp")}
           />
 
           <Acao

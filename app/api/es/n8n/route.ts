@@ -36,8 +36,8 @@ const ACOES = [
 
 /* Pedido silver (entrega em 30 min) com erro no envio da música: manda na hora
    pelo e-mail de suporte (fluxo n8n "ES - Envio SMTP", o mesmo do reprocessamento).
-   reprocesso_envio = 4 é a marca "já enviado pelo e-mail de suporte" (ver ETAPAS
-   em /api/es/reprocessar): o pedido sai das tentativas de 30 em 30 min. Se o n8n
+   reprocesso_envio = 4 é a marca "já enviado pelo e-mail de suporte" (acima do
+   limite em /api/es/reprocessar): o pedido sai das tentativas de 30 em 30 min. Se o n8n
    não responder, não marca nada e o reprocessamento normal segue. Se o envio pelo
    e-mail de suporte falhar, o próprio fluxo manda o alerta (URGENTE) por e-mail. */
 const ENVIADO_PELO_SUPORTE = 4;
@@ -269,10 +269,16 @@ export async function POST(req: NextRequest) {
       mensagem = "Entrega principal marcada como entregue";
       break;
 
-    case "email_erro":
+    case "email_erro": {
+      // Erro de uma tentativa (ex.: reenvio pelo Resend) não desfaz uma entrega que já deu certo
+      const atual = await prisma.pedidoEs.findUnique({ where: { id }, select: { entrega_email: true } });
+      if (atual?.entrega_email) {
+        return NextResponse.json({ success: true, message: "Já entregue — erro ignorado", id });
+      }
       update = { entrega_email: false };
       mensagem = "Entrega principal marcada como erro";
       break;
+    }
 
     case "erro_geracao":
       update = { gerou_musica: false, erro_geracao: true };
