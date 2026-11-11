@@ -54,8 +54,11 @@ const FLUXOS = {
 type Tipo = keyof typeof FLUXOS;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  // Logado no painel, ou o app de atendimento com o segredo do checkout (x-checkout-secret)
+  const segredo = process.env.ES_CHECKOUT_SECRET || process.env.US_CHECKOUT_SECRET;
+  const peloAtendimento = !!segredo && req.headers.get("x-checkout-secret") === segredo;
+  const session = peloAtendimento ? null : await getServerSession(authOptions);
+  if (!session && !peloAtendimento) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
 
